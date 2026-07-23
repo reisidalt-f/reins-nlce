@@ -1,0 +1,55 @@
+name: Release Native CLI Binary
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        default: 'v0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up GraalVM and JDK 17
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '17'
+          distribution: 'graalvm'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'maven'
+
+      - name: Compile Java classes
+        run: mvn clean compile
+
+      - name: Copy dependency libraries
+        run: mvn dependency:copy-dependencies
+
+      - name: Build Native CLI Image with GraalVM
+        run: |
+          native-image -cp "target/classes:target/dependency/*" \
+            -H:ReflectionConfigurationFiles=.github/workflows/reflect-config.json \
+            -H:IncludeResources="reasoning/.*\.ftl" \
+            --enable-url-protocols=http,https \
+            --no-fallback \
+            br.com.dizeno.reins.run.cli.ReinsCli \
+            reins
+
+      - name: Create GitHub Release and Upload Artifact
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: Release ${{ inputs.version }}
+          draft: false
+          prerelease: false
+          files: reins
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
