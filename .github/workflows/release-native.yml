@@ -1,0 +1,201 @@
+name: Release Native CLI Binary
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        default: 'v0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  # STEP 1: Build the native binary for all 3 platforms in parallel
+  build-matrix:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            artifact_name: reins-linux
+            binary_name: reins
+            classpath_separator: ":"
+          - os: windows-latest
+            artifact_name: reins-windows.exe
+            binary_name: reins.exe
+            classpath_separator: ";"
+          - os: macos-latest
+            artifact_name: reins-macos
+            binary_name: reins
+            classpath_separator: ":"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up GraalVM and JDK 17
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '17'
+          distribution: 'graalvm'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'maven'
+
+      - name: Compile Java classes
+        run: mvn clean compile
+
+      - name: Copy dependency libraries
+        run: mvn dependency:copy-dependencies
+
+      - name: Build Native CLI Image with GraalVM
+        run: native-image -cp "target/classes${{ matrix.classpath_separator }}target/dependency/*" -H:ReflectionConfigurationFiles=.github/workflows/reflect-config.json -H:IncludeResources="reasoning/.*\.ftl" -H:IncludeResources="freemarker/version\.properties" -H:IncludeResources="freemarker/ext/beans/unsafeMethods\.properties" -H:IncludeResources="freemarker/ext/beans/DefaultMemberAccessPolicy-rules" --enable-url-protocols=http,https --no-fallback -o reins br.com.dizeno.reins.run.cli.ReinsCli
+
+      - name: Rename and prepare binary
+        shell: bash
+        run: mv ${{ matrix.binary_name }} ${{ matrix.artifact_name }}
+
+      - name: Upload temporary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}
+          retention-days: 1
+
+  # STEP 2: Download all artifacts, construct the single flat release structure, and publish archives
+  create-release:
+    name: Create GitHub Release
+    needs: build-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all build binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: bin-artifacts/
+          merge-multiple: true
+
+      - name: Construct unified release folder structure
+        run: |
+          # 1. Create packaging folder and subfolders
+          mkdir -p dist/bin
+          
+          # 2. Copy compiled native binaries into the bin/ folder
+          cp bin-artifacts/reins-linux dist/bin/reins-linux
+          cp bin-artifacts/reins-macos dist/bin/reins-macos
+          cp bin-artifacts/reins-windows.exe dist/bin/reins-windows.exe
+          
+          # 3. Give execution rights to binaries
+          chmod +x dist/bin/reins-linux dist/bin/reins-macos
+          
+          # 4. Copy documentation and readme to the root
+          cp README.md dist/
+          cp -r docs dist/
+          
+          # 5. Create wrapper run scripts at root
+          
+          # 5a. Bash run script for Linux/macOS
+          cat << 'EOF' > dist/reins
+          #!/bin/sh
+          OS="$(uname -s)"
+          DIR="$(cd "$(dirname "$0")" && pwd)"
+          if [ "$OS" = "Darwin" ]; then
+              exec "$DIR/bin/reins-macos" "$@"
+          else
+              exec "$DIR/bin/reins-linux" "$@"
+          fi
+          EOF
+          chmod +x dist/reins
+          
+          # 5b. Windows Batch run script
+          cat << 'EOF' > dist/reins.cmd
+          @echo off
+          "%~dp0bin\reins-windows.exe" %*
+          EOF
+          
+          # 5c. Windows PowerShell run script
+          cat << 'EOF' > dist/reins.ps1
+          & "$PSScriptRoot\bin\reins-windows.exe" $args
+          EOF
+          
+          # 6. Create installation scripts at root
+          
+          # 6a. Linux installation script
+          cat << 'EOF' > dist/install-linux.sh
+          #!/bin/sh
+          set -e
+          DIR="$(cd "$(dirname "$0")" && pwd)"
+          TARGET="/usr/local/bin"
+          if [ -w "$TARGET" ]; then
+              cp "$DIR/bin/reins-linux" "$TARGET/reins"
+              chmod +x "$TARGET/reins"
+              echo "Reins installed successfully to $TARGET/reins"
+          else
+              echo "Requesting root privileges to install to $TARGET..."
+              sudo cp "$DIR/bin/reins-linux" "$TARGET/reins"
+              sudo chmod +x "$TARGET/reins"
+              echo "Reins installed successfully to $TARGET/reins"
+          fi
+          EOF
+          chmod +x dist/install-linux.sh
+          
+          # 6b. macOS installation script
+          cat << 'EOF' > dist/install-macos.sh
+          #!/bin/sh
+          set -e
+          DIR="$(cd "$(dirname "$0")" && pwd)"
+          TARGET="/usr/local/bin"
+          if [ -w "$TARGET" ]; then
+              cp "$DIR/bin/reins-macos" "$TARGET/reins"
+              chmod +x "$TARGET/reins"
+              echo "Reins installed successfully to $TARGET/reins"
+          else
+              echo "Requesting root privileges to install to $TARGET..."
+              sudo cp "$DIR/bin/reins-macos" "$TARGET/reins"
+              sudo chmod +x "$TARGET/reins"
+              echo "Reins installed successfully to $TARGET/reins"
+          fi
+          EOF
+          chmod +x dist/install-macos.sh
+          
+          # 6c. Windows PowerShell installation script
+          cat << 'EOF' > dist/install-windows.ps1
+          $binDir = Join-Path $PSScriptRoot "bin"
+          $exePath = Join-Path $binDir "reins-windows.exe"
+          $localBin = Join-Path $env:USERPROFILE ".reins\bin"
+          if (!(Test-Path $localBin)) {
+              New-Item -ItemType Directory -Force -Path $localBin
+          }
+          Copy-Item -Path $exePath -Destination (Join-Path $localBin "reins.exe") -Force
+          Write-Host "Reins installed to $localBin\reins.exe"
+          Write-Host "Please add $localBin to your user PATH environment variable if you haven't already."
+          EOF
+
+      - name: Compress and build flat archives (tar.gz and zip)
+        run: |
+          # Compress the flat contents of the dist directory directly
+          cd dist
+          tar -czf ../reins-${{ inputs.version }}.tar.gz *
+          zip -r ../reins-${{ inputs.version }}.zip *
+          cd ..
+
+      - name: List generated packages (Diagnostic)
+        run: ls -l reins-${{ inputs.version }}.*
+
+      - name: Create GitHub Release and Upload Packages
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: Release ${{ inputs.version }}
+          draft: false
+          prerelease: false
+          files: |
+            reins-${{ inputs.version }}.tar.gz
+            reins-${{ inputs.version }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

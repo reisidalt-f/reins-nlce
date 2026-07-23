@@ -58,6 +58,9 @@ public class SafeTemplateExecutor {
         try {
             logScriptDataModelDebug(scriptName, context, config, scriptContext);
             ScriptChainEvaluationResult result = scriptEvaluator.evaluateWithOutcome(scriptName, context);
+            if (result.terminalReason() == ScriptTerminalReason.FATAL_ERROR && result.fatalException() != null) {
+                throw result.fatalException();
+            }
             if (result.diagnostics() != null && result.diagnostics().terminalReason() == ScriptTerminalReason.NON_BLANK_SELECTED) {
                 LOGGER.fine("[reins-script] terminal"
                         + " context=" + (scriptContext == null ? "unknown" : scriptContext)
