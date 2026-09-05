@@ -16,6 +16,7 @@ import br.com.dizeno.reins.run.config.settings.*;
 import br.com.dizeno.reins.reasoning.inference.llm.error.LlmServiceException;
 import br.com.dizeno.reins.reasoning.inference.llm.service.DefaultLlmService;
 import br.com.dizeno.reins.reasoning.inference.llm.model.LlmRequest;
+import br.com.dizeno.reins.reasoning.scripting.ConversationMessage;
 import br.com.dizeno.reins.testutil.RecordingLog;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -86,7 +88,7 @@ class OllamaAdapterSecurityTest {
     private LlmRequest request() {
         LlmRequest request = new LlmRequest();
         request.setRequestId("security-request");
-        request.setMarkdownContent("prompt");
+        request.setConversationHistory(List.of(new ConversationMessage(ConversationMessage.Role.USER, "prompt")));
         return request;
     }
 }

@@ -198,22 +198,24 @@ public class OllamaProviderAdapterTest {
     
 
     @Test
-    public void testInvokeSingleTurn() throws Exception {
+    public void testInvokeWithHistory() throws Exception {
         ReinsConfig config = createOllamaConfig("llama2", 30, 0);
         config.getOllama().setEndpoint(baseUrl);
 
+        Map<String, Object> messagePayload = new HashMap<>();
+        messagePayload.put("role", "assistant");
+        messagePayload.put("content", "Compiled content");
+
         Map<String, Object> responsePayload = new HashMap<>();
-        responsePayload.put("response", "Compiled content");
+        responsePayload.put("message", messagePayload);
         responsePayload.put("done", true);
-        
+
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(200)
             .addHeader("Content-Type", "application/json")
             .setBody(mapper.writeValueAsString(responsePayload)));
 
-        LlmRequest request = new LlmRequest();
-        request.setRequestId("test-1");
-        request.setMarkdownContent("test prompt");
+        LlmRequest request = buildRequest("test-1");
 
         LlmResponse response = adapter.invoke(request, config);
 
@@ -234,11 +236,11 @@ public class OllamaProviderAdapterTest {
         Map<String, Object> messagePayload = new HashMap<>();
         messagePayload.put("role", "assistant");
         messagePayload.put("content", "Response based on history");
-        
+
         Map<String, Object> responsePayload = new HashMap<>();
         responsePayload.put("message", messagePayload);
         responsePayload.put("done", true);
-        
+
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(200)
             .addHeader("Content-Type", "application/json")
@@ -266,8 +268,12 @@ public class OllamaProviderAdapterTest {
                 .build();
             OllamaProviderAdapter cloudAdapter = new OllamaProviderAdapter(new OllamaClient(cloudClient));
 
+            Map<String, Object> messagePayload = new HashMap<>();
+            messagePayload.put("role", "assistant");
+            messagePayload.put("content", "cloud compiled content");
+
             Map<String, Object> responsePayload = new HashMap<>();
-            responsePayload.put("response", "cloud compiled content");
+            responsePayload.put("message", messagePayload);
             responsePayload.put("done", true);
 
             cloudServer.enqueue(new MockResponse()
@@ -278,9 +284,7 @@ public class OllamaProviderAdapterTest {
             ReinsConfig config = createOllamaConfig("llama2", 30, 0);
             config.getOllama().setEndpoint("http://api.ollama.example.com:" + cloudServer.getPort());
 
-            LlmRequest request = new LlmRequest();
-            request.setRequestId("test-cloud");
-            request.setMarkdownContent("test prompt");
+            LlmRequest request = buildRequest("test-cloud");
 
             LlmResponse response = cloudAdapter.invoke(request, config);
 
@@ -301,7 +305,7 @@ public class OllamaProviderAdapterTest {
             .addHeader("Content-Type", "application/json")
             .setBody("{\"error\":\"Bearer secret-key-1234 rejected\"}"));
 
-        Exception error = assertThrows(Exception.class, () -> adapter.invoke(singleTurnRequest("auth-1"), config));
+        Exception error = assertThrows(Exception.class, () -> adapter.invoke(buildRequest("auth-1"), config));
 
         LlmError mapped = new LlmErrorMapper().map(error, "ollama");
         assertEquals(LlmError.Category.AUTHENTICATION, mapped.getCategory());
@@ -355,10 +359,10 @@ public class OllamaProviderAdapterTest {
         return config;
     }
 
-    private LlmRequest singleTurnRequest(String requestId) {
+    private LlmRequest buildRequest(String requestId) {
         LlmRequest request = new LlmRequest();
         request.setRequestId(requestId);
-        request.setMarkdownContent("test prompt");
+        request.setConversationHistory(List.of(new ConversationMessage(ConversationMessage.Role.USER, "test prompt")));
         return request;
     }
 }

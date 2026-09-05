@@ -63,17 +63,18 @@ class OllamaServiceIntegrationTest {
     }
 
     @Test
-    void successfulSingleTurnInvocationCarriesNormalizedMetadataAndLogsSelection() throws Exception {
+    void successfulInvocationCarriesNormalizedMetadataAndLogsSelection() throws Exception {
+        Map<String, Object> message = Map.of("role", "assistant", "content", "compiled text");
         server.enqueue(json(200, Map.of(
                 "model", "llama3",
-                "response", "compiled text",
+                "message", message,
                 "done", true
         )));
 
         ReinsConfig config = config(baseUrl, "llama3", null);
         config.getLogging().setLlmProvider(true);
 
-        LlmResponse response = llmService.invoke(singleTurnRequest("req-1", "prompt"), config);
+        LlmResponse response = llmService.invoke(chatRequest("req-1", "prompt"), config);
 
         assertEquals("compiled text", response.getContent());
         assertEquals("ollama", response.getMetadata().get("provider"));
@@ -88,18 +89,19 @@ class OllamaServiceIntegrationTest {
 
         RecordedRequest recordedRequest = server.takeRequest();
         assertEquals("POST", recordedRequest.getMethod());
-        assertTrue(recordedRequest.getPath().endsWith("/api/compile"));
+        assertTrue(recordedRequest.getPath().endsWith("/api/chat"));
     }
 
     @Test
     void successfulInvocationSuppressesSelectionLogByDefault() throws Exception {
+        Map<String, Object> message = Map.of("role", "assistant", "content", "compiled text");
         server.enqueue(json(200, Map.of(
                 "model", "llama3",
-                "response", "compiled text",
+                "message", message,
                 "done", true
         )));
 
-        LlmResponse response = llmService.invoke(singleTurnRequest("req-1", "prompt"), config(baseUrl, "llama3", null));
+        LlmResponse response = llmService.invoke(chatRequest("req-1", "prompt"), config(baseUrl, "llama3", null));
 
         assertEquals("compiled text", response.getContent());
         assertFalse(log.hasInfoContaining("Selected provider:"));
@@ -116,8 +118,7 @@ class OllamaServiceIntegrationTest {
                 "done", true
         )));
 
-        LlmRequest request = singleTurnRequest("req-2", null);
-        request.setConversationHistory(List.of(new ConversationMessage(ConversationMessage.Role.USER, "hello")));
+        LlmRequest request = chatRequest("req-2", "hello");
 
         LlmResponse response = llmService.invoke(request, config(baseUrl + "/", "llama3", null));
 
@@ -135,7 +136,7 @@ class OllamaServiceIntegrationTest {
 
         LlmServiceException error = assertThrows(
                 LlmServiceException.class,
-                () -> llmService.invoke(singleTurnRequest("req-3", "prompt"), config(baseUrl, "llama3", "secret-key-1234"))
+                () -> llmService.invoke(chatRequest("req-3", "prompt"), config(baseUrl, "llama3", "secret-key-1234"))
         );
 
         assertEquals(LlmError.Category.AUTHENTICATION, error.getError().getCategory());
@@ -145,13 +146,14 @@ class OllamaServiceIntegrationTest {
 
     @Test
     void authenticatedInvocationSendsBearerHeader() throws Exception {
+        Map<String, Object> message = Map.of("role", "assistant", "content", "authorized");
         server.enqueue(json(200, Map.of(
                 "model", "llama3",
-                "response", "authorized",
+                "message", message,
                 "done", true
         )));
 
-        llmService.invoke(singleTurnRequest("req-4", "prompt"), config(baseUrl, "llama3", "token-1234"));
+        llmService.invoke(chatRequest("req-4", "prompt"), config(baseUrl, "llama3", "token-1234"));
 
         RecordedRequest recordedRequest = server.takeRequest();
         assertEquals("Bearer token-1234", recordedRequest.getHeader("Authorization"));
@@ -170,10 +172,12 @@ class OllamaServiceIntegrationTest {
         return config;
     }
 
-    private LlmRequest singleTurnRequest(String requestId, String markdownContent) {
+    private LlmRequest chatRequest(String requestId, String promptText) {
         LlmRequest request = new LlmRequest();
         request.setRequestId(requestId);
-        request.setMarkdownContent(markdownContent);
+        if (promptText != null) {
+            request.setConversationHistory(List.of(new ConversationMessage(ConversationMessage.Role.USER, promptText)));
+        }
         return request;
     }
 
