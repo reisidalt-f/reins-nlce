@@ -31,7 +31,6 @@ import java.util.Map;
 public class ReasoningPipelineExecutor {
     public static final String SCRIPT_NAME = "reasoning-pipeline.ftl";
     public static final String LIST_PHASES = "list-phases";
-    public static final String DEFAULT_PHASE = "default-cycle";
 
     private final ScriptEvaluator scriptEvaluator;
     private final ResponseDirectiveParser directiveParser;
@@ -165,6 +164,27 @@ public class ReasoningPipelineExecutor {
             return PipelineRuntimeOutcome.success(currentPhaseName(plan, currentIndex), "Pipeline completed successfully.");
         }
         return null;
+    }
+
+    /**
+     * Finds the phase index in the plan matching the target phase name.
+     *
+     * @param plan the plan
+     * @param targetPhase the target phase name
+     * @return the phase index, or -1 if not found
+     */
+    public int findPhaseIndex(ReasoningPipelinePlan plan, String targetPhase) {
+        if (plan == null || plan.getPhases() == null || targetPhase == null || targetPhase.isBlank()) {
+            return -1;
+        }
+        String normalized = targetPhase.trim();
+        List<ReasoningPhaseDescriptor> descriptors = plan.getPhases();
+        for (int i = 0; i < descriptors.size(); i++) {
+            if (descriptors.get(i).getName().equalsIgnoreCase(normalized)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**

@@ -115,15 +115,7 @@ class ScriptPerformanceBaselineTest {
                         List.of(),
                         List.of(),
                         List.of()))
-                .config(new ReasoningScriptViews.ConfigView(
-                        "gemini-2.5-pro",
-                        8,
-                        true,
-                        false,
-                        false,
-                        true,
-                        false,
-                        null))
+                .config(new ReasoningScriptViews.ConfigView(new br.com.dizeno.reins.run.config.ReinsConfig()))
                 .cycle(new ReasoningScriptViews.CycleView("perf-cycle", 1, 8, "IN_PROGRESS", null))
                 .policy(new ReasoningScriptViews.PolicyView(
                         List.of("main", "test", "target"),

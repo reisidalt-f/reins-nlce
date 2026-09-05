@@ -20,12 +20,12 @@ import org.mockito.Mockito;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.when;
 
 class SourceFileProcessorTest {
@@ -46,7 +46,7 @@ class SourceFileProcessorTest {
         CompilationSummary summary = new CompilationSummary();
         summary.incrementProcessed();
 
-        when(compilationService.processFiles(any(), anyBoolean(), any(), any(), any()))
+        when(compilationService.processFiles(any(List.class), any(), any(), any()))
                 .thenReturn(summary);
 
         ReinsConfig config = new ReinsConfig();
@@ -57,7 +57,6 @@ class SourceFileProcessorTest {
 
         ProcessingResult result = processor.process(
                 new File("src/main/nl/demo.md"),
-                false,
                 config,
                 Path.of("."),
                 log
@@ -73,7 +72,7 @@ class SourceFileProcessorTest {
         CompilationSummary summary = new CompilationSummary();
         summary.incrementProcessed();
 
-        when(compilationService.processFiles(any(), anyBoolean(), any(), any(), any()))
+        when(compilationService.processFiles(any(List.class), any(), any(), any()))
                 .thenReturn(summary);
 
         ReinsConfig config = new ReinsConfig();
@@ -84,7 +83,6 @@ class SourceFileProcessorTest {
 
         ProcessingResult result = processor.process(
                 new File("src/main/nl/demo.md"),
-                false,
                 config,
                 Path.of("."),
                 log

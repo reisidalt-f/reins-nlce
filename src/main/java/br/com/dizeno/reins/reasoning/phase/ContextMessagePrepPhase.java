@@ -47,26 +47,51 @@ public class ContextMessagePrepPhase implements ReasoningPhase {
      */
     @Override
     public ReasoningPhase execute(ReasoningContext context) throws Exception {
+        List<AttachedFilePayload> compiledAttachments = (context.getRequest() != null && context.getRequest().getEagerlyProvide() != null)
+                ? context.getRequest().getEagerlyProvide().getCompiledAttachments()
+                : List.of();
+        List<AttachedFilePayload> inspectedAttachments = (context.getRequest() != null && context.getRequest().getEagerlyProvide() != null)
+                ? context.getRequest().getEagerlyProvide().getInspectedAttachments()
+                : List.of();
+
+        List<AttachedFilePayload> backgroundAttachments = new ArrayList<>();
+        if (context.getRequest() != null && context.getRequest().getAttachments() != null) {
+            backgroundAttachments.addAll(context.getRequest().getAttachments());
+        }
+        if (context.getRequest() != null && context.getRequest().getCompilationBackgroundPayload() != null
+                && !context.getRequest().getCompilationBackgroundPayload().isEmpty()) {
+            for (br.com.dizeno.reins.compilation.context.CompilationBackgroundFile ctxFile : context.getRequest().getCompilationBackgroundPayload().getFiles()) {
+                if (!ctxFile.matchesPhase(context.getCurrentPipelinePhase())) {
+                    continue;
+                }
+                AttachedFilePayload ctxAttachment = new AttachedFilePayload();
+                String qualifiedContextPath = coordinator.messageFormattingService.canonicalizeContextAttachmentPath(ctxFile.getDisplayPath());
+                int separator = qualifiedContextPath.indexOf(':');
+                ctxAttachment.setBase(separator > 0 ? qualifiedContextPath.substring(0, separator) : "main");
+                ctxAttachment.setRelativePath(ctxFile.getDisplayPath());
+                ctxAttachment.setQualifiedPath(qualifiedContextPath);
+                ctxAttachment.setContent(ctxFile.getContent());
+                backgroundAttachments.add(ctxAttachment);
+            }
+        }
+
         List<AttachedFilePayload> firstTurnAttachments = coordinator.attachmentManagementService.buildFirstTurnAttachments(
                 context.getRequest(),
                 context.getSourceAttachment(),
                 context.getFirstTurnReferenceTreeContext(),
                 context.getProjectRoot(),
                 context.getConfig(),
-                context.getCycleLog());
+                context.getCycleLog(),
+                context.getCurrentPipelinePhase());
 
-        List<AttachedFilePayload> transformedSystemAttachments = context.getRequest().getAttachments() == null
-                ? List.of()
-                : new ArrayList<>(context.getRequest().getAttachments());
         List<AttachedFilePayload> firstTurnContextAttachments = coordinator.attachmentManagementService.mergeAttachments(
-                transformedSystemAttachments,
+                backgroundAttachments,
                 firstTurnAttachments);
         firstTurnContextAttachments = coordinator.scriptSelectionService.applyAttachmentListScript(firstTurnContextAttachments, context.getConfig());
         context.setFirstTurnContextAttachments(firstTurnContextAttachments);
 
         final String referenceTreeForContextMessages = context.getFirstTurnReferenceTree();
-        final List<AttachedFilePayload> contextAttachmentsForContextMessages =
-                firstTurnContextAttachments == null ? List.of() : List.copyOf(firstTurnContextAttachments);
+        final List<AttachedFilePayload> backgroundAttachmentsForScript = List.copyOf(backgroundAttachments);
 
         ReasoningScriptContext contextMessageScriptContext = coordinator.scriptEvaluationService.buildScriptBaseContext(
                 context.getRequest(),
@@ -77,8 +102,8 @@ public class ContextMessagePrepPhase implements ReasoningPhase {
                 referenceTreeForContextMessages,
                 new ArrayList<>(context.getInspectedPaths()),
                 new ArrayList<>(context.getWrittenPaths()),
-                contextAttachmentsForContextMessages,
-                context.getRequest() != null && context.getRequest().isProjectInferenceCycle());
+                backgroundAttachmentsForScript,
+                false);
 
         ContextMessageBuildRequest contextMessageBuildRequest = new ContextMessageBuildRequest(
                 context.getRequest() == null ? null : context.getRequest().getSourcePath(),
@@ -99,7 +124,24 @@ public class ContextMessagePrepPhase implements ReasoningPhase {
                         referenceTreeForContextMessages,
                         new ArrayList<>(context.getInspectedPaths()),
                         new ArrayList<>(context.getWrittenPaths()),
-                        contextAttachmentsForContextMessages));
+                        "background-files".equals(step) ? backgroundAttachmentsForScript : List.of()));
+
+        List<AttachedFilePayload> referenceTreeAttachments = new ArrayList<>();
+        if (context.getSourceAttachment() != null) {
+            referenceTreeAttachments.add(context.getSourceAttachment());
+        }
+        boolean attachReferencedFiles = context.getConfig() != null
+                && context.getConfig().getContext() != null
+                && context.getConfig().getContext().getReferencesTree() != null
+                && context.getConfig().getContext().getReferencesTree().isAttachFiles();
+        if (attachReferencedFiles && context.getFirstTurnReferenceTreeContext() != null) {
+            List<AttachedFilePayload> referencedAttachments = coordinator.referencedAttachmentBuilder.build(
+                    context.getFirstTurnReferenceTreeContext(),
+                    context.getProjectRoot());
+            if (referencedAttachments != null) {
+                referenceTreeAttachments.addAll(referencedAttachments);
+            }
+        }
 
         List<ConversationMessage> prependMessages = new ArrayList<>(
                 contextMessageBundle.getMessages() == null ? List.of() : contextMessageBundle.getMessages());
@@ -109,12 +151,16 @@ public class ContextMessagePrepPhase implements ReasoningPhase {
 
         List<MessageTypePlan> contextPlan = contextMessageBundle.getMessageTypePlan();
         for (int i = 0; i < prependMessages.size() && i < contextPlan.size(); i++) {
-            if ("background-files".equals(contextPlan.get(i).getStepName())
-                    && !firstTurnContextAttachments.isEmpty()) {
-                ConversationMessage bg = prependMessages.get(i);
-                prependMessages.set(i,
-                        new ConversationMessage(bg.getRole(), bg.getText(), firstTurnContextAttachments));
-                break;
+            String stepName = contextPlan.get(i).getStepName();
+            ConversationMessage msg = prependMessages.get(i);
+            if ("previously-compiled-files".equals(stepName) && !compiledAttachments.isEmpty()) {
+                prependMessages.set(i, new ConversationMessage(msg.getRole(), msg.getText(), compiledAttachments));
+            } else if ("previously-inspected-files".equals(stepName) && !inspectedAttachments.isEmpty()) {
+                prependMessages.set(i, new ConversationMessage(msg.getRole(), msg.getText(), inspectedAttachments));
+            } else if ("background-files".equals(stepName) && !backgroundAttachments.isEmpty()) {
+                prependMessages.set(i, new ConversationMessage(msg.getRole(), msg.getText(), backgroundAttachments));
+            } else if ("references-tree".equals(stepName) && !referenceTreeAttachments.isEmpty()) {
+                prependMessages.set(i, new ConversationMessage(msg.getRole(), msg.getText(), referenceTreeAttachments));
             }
         }
         context.setPrependMessages(prependMessages);
@@ -125,7 +171,7 @@ public class ContextMessagePrepPhase implements ReasoningPhase {
         String prependMessagesSafeSummary = "prepend-messages: count=" + prependMessages.size();
         context.setPrependMessagesSafeSummary(prependMessagesSafeSummary);
 
-        String migratedFirstUserPayload = coordinator.renderPipelineGeminiMessageWithFailureLogging(
+        String migratedFirstUserPayload = coordinator.renderPipelineMessageToModelWithFailureLogging(
                 context.getCycleLog(),
                 0,
                 context.getCurrentPipelinePhase(),
@@ -163,6 +209,12 @@ public class ContextMessagePrepPhase implements ReasoningPhase {
                     firstTurnContextAttachments);
         }
         String firstUserMessage = migratedFirstUserPayload == null ? "" : migratedFirstUserPayload.stripTrailing();
+        int summarizeTurns = context.getConfig() != null && context.getConfig().getReasoning() != null
+                ? context.getConfig().getReasoning().getSummarizeCycleTurns()
+                : 1;
+        if (summarizeTurns > 0 && 1 % summarizeTurns == 0) {
+            firstUserMessage = coordinator.messageFormattingService.withSummarizationInstruction(firstUserMessage);
+        }
         context.setNextMessageFromScript(true);
         context.setNextMessage(coordinator.formatNextMessage(
                 firstUserMessage,

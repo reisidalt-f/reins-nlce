@@ -4,9 +4,9 @@ The reasoning cycle reached the configured max turns without successful fulfillm
 
 Requirements:
 1) Use headers INTENT: finish-error and CONTENT_TYPE: message-to-user.
-2) Summarize the reasoning and MCP work completed so far.
+2) Summarize the reasoning and tool work completed so far, including a cumulative list of gathered information.
 3) Explicitly state you could not conclude because max reasoning turns were reached before fulfillment.
-4) Do not include MCP requests or additional tool operations in this response.
+4) Do not include tool requests or additional tool operations in this response.
 <#if (project.cycle.maxTurns > 0)>
 5) Mention configured max turns: ${project.cycle.maxTurns}.
 </#if>

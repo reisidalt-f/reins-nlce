@@ -65,8 +65,34 @@ public class BasePathResolver {
      * @return the resolved or constructed object
      */
     public Path resolve(FileReference reference) {
-        Path candidate = reference.toAbsolutePath(this::resolveBaseRoot);
+        FileReference normalizedRef = sanitizeTargetReference(reference);
+        Path candidate = normalizedRef.toAbsolutePathByBaseName(this::resolveBaseRoot);
         return pathValidator.validateInProject(candidate);
+    }
+
+    private FileReference sanitizeTargetReference(FileReference reference) {
+        if (reference == null || reference.getBase() != br.com.dizeno.reins.source.domain.FileReferenceBase.TARGET) {
+            return reference;
+        }
+        Path targetRoot = resolveBaseRoot(br.com.dizeno.reins.source.domain.FileReferenceBase.TARGET);
+        if (targetRoot == null) {
+            return reference;
+        }
+        try {
+            Path projectRoot = getProjectRoot();
+            if (targetRoot.startsWith(projectRoot) && !targetRoot.equals(projectRoot)) {
+                String targetRel = PathNormalizer.toForwardSlashes(projectRoot.relativize(targetRoot).toString());
+                while (targetRel.startsWith("/")) targetRel = targetRel.substring(1);
+                while (targetRel.endsWith("/")) targetRel = targetRel.substring(0, targetRel.length() - 1);
+
+                String path = reference.getPath();
+                if (!targetRel.isBlank() && path != null && path.startsWith(targetRel + "/")) {
+                    return new FileReference(br.com.dizeno.reins.source.domain.FileReferenceBase.TARGET, path.substring(targetRel.length() + 1));
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return reference;
     }
 
     /**
@@ -219,6 +245,14 @@ public class BasePathResolver {
         if ("project".equals(normalized)) {
             return mappings.getMainRoot();
         }
+        Path sourceRoot = mappings.getSourceRoot(normalized);
+        if (sourceRoot != null) {
+            return sourceRoot;
+        }
+        Path targetRoot = mappings.getTargetRoot(normalized);
+        if (targetRoot != null) {
+            return targetRoot;
+        }
         return resolveBaseRoot(FileReferenceBase.from(normalized));
     }
 
@@ -291,17 +325,32 @@ public class BasePathResolver {
      */
     public FileReference toFileReference(Path absolutePath) {
         Path normalized = absolutePath.toAbsolutePath().normalize();
-        if (normalized.startsWith(mappings.getMainRoot())) {
-            return new FileReference(FileReferenceBase.MAIN, relativize("main", normalized));
+        if (mappings != null) {
+            for (java.util.Map.Entry<String, Path> entry : mappings.getTargetRoots().entrySet()) {
+                if (entry.getValue() != null && normalized.startsWith(entry.getValue())) {
+                    return FileReference.of("target", relativize("target", normalized));
+                }
+            }
+            if (mappings.getTargetRoot() != null && normalized.startsWith(mappings.getTargetRoot())) {
+                return FileReference.of("target", relativize("target", normalized));
+            }
+            for (java.util.Map.Entry<String, Path> entry : mappings.getSourceRoots().entrySet()) {
+                if (entry.getValue() != null && normalized.startsWith(entry.getValue())) {
+                    return FileReference.of(entry.getKey(), relativize(entry.getKey(), normalized));
+                }
+            }
+        }
+        if (mappings.getMainRoot() != null && normalized.startsWith(mappings.getMainRoot())) {
+            return FileReference.of("main", relativize("main", normalized));
         }
         if (mappings.getTestRoot() != null && normalized.startsWith(mappings.getTestRoot())) {
-            return new FileReference(FileReferenceBase.TEST, relativize("test", normalized));
+            return FileReference.of("test", relativize("test", normalized));
         }
         if (mappings.getScriptRoot() != null && normalized.startsWith(mappings.getScriptRoot())) {
-            return new FileReference(FileReferenceBase.SCRIPT, relativize("script", normalized));
+            return FileReference.of("script", relativize("script", normalized));
         }
-        if (normalized.startsWith(mappings.getTargetRoot())) {
-            return new FileReference(FileReferenceBase.TARGET, relativize("target", normalized));
+        if (mappings.getTargetRoot() != null && normalized.startsWith(mappings.getTargetRoot())) {
+            return FileReference.of("target", relativize("target", normalized));
         }
         throw new SecurityException("Path is outside configured base roots: " + normalized);
     }

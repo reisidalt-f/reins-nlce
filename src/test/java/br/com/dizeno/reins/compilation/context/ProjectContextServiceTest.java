@@ -55,7 +55,7 @@ class ProjectContextServiceTest {
         write("conventions.md", "# Conventions\n[deep.md]\n");
         write("deep.md", "# Deep");
         ProjectContextService service = new ProjectContextService();
-        CompilationBackgroundPayload result = service.load(root.toFile(), projectRoot);
+        CompilationBackgroundPayload result = service.load(root.toFile(), projectRoot, Set.of(), ReferenceDepthPolicy.parse("1"));
         assertEquals(2, result.getFiles().size());
         assertEquals("project.md", result.getFiles().get(0).getDisplayPath());
         assertEquals("conventions.md", result.getFiles().get(1).getDisplayPath());

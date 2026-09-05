@@ -57,7 +57,22 @@ public final class TrackingRecordHelper {
             Map<String, Long> postMtimes,
             Map<String, Long> inspectedMtimes,
             Map<String, Long> markdownReferenceMtimes, ReinsConfig config, String outputPolicy,
-            String resolvedTargetRoot) {
+            String resolvedTargetRoot, String lastStatus) {
+
+        public TrackingParams(
+                String sourcePath, String sourceCategory, String sourceHash, Long sourceModificationTime,
+                List<String> fingerprints, List<String> compiledPaths,
+                List<String> inspectedPaths,
+                Map<String, String> compiledFileCategories,
+                Map<String, String> inspectedFileCategories,
+                Map<String, Long> postMtimes,
+                Map<String, Long> inspectedMtimes,
+                Map<String, Long> markdownReferenceMtimes, ReinsConfig config, String outputPolicy,
+                String resolvedTargetRoot) {
+            this(sourcePath, sourceCategory, sourceHash, sourceModificationTime, fingerprints, compiledPaths,
+                    inspectedPaths, compiledFileCategories, inspectedFileCategories, postMtimes, inspectedMtimes,
+                    markdownReferenceMtimes, config, outputPolicy, resolvedTargetRoot, "success");
+        }
     }
 
     /**
@@ -85,7 +100,7 @@ public final class TrackingRecordHelper {
         record.setModel(p.config().resolveModel());
         record.setOutputPolicy(p.outputPolicy());
         record.setLastCompiledAt(Instant.now().toString());
-        record.setLastStatus("success");
+        record.setLastStatus(p.lastStatus() != null ? p.lastStatus() : "success");
         record.setResolvedTargetRoot(p.resolvedTargetRoot());
 
         record.setCompiledFiles(p.compiledPaths().stream().collect(Collectors.toMap(
@@ -425,6 +440,38 @@ public final class TrackingRecordHelper {
                     TrackedPathResolver.resolveTrackedPath(projectRoot, trackedPath, resolvedTargetRoot));
         } catch (Exception ex) {
             return false;
+        }
+    }
+
+    /**
+     * Deletes all previously generated compiled files recorded in the tracking record.
+     *
+     * @param projectRoot the root path of the project
+     * @param previous    the previous tracking record containing compiled files
+     * @param log         the logger instance
+     */
+    public static void deletePreviouslyGeneratedFiles(Path projectRoot,
+            SourceTrackingRecord previous,
+            Log log) {
+        if (previous == null || previous.getCompiledFiles() == null || previous.getCompiledFiles().isEmpty()) {
+            return;
+        }
+        String resolvedTargetRoot = previous.getResolvedTargetRoot();
+        for (String priorPath : previous.getCompiledFiles().keySet()) {
+            String canonical = FileReference.fromCanonical(priorPath).toCanonicalString();
+            try {
+                Path targetPath = TrackedPathResolver.resolveTrackedPath(projectRoot, canonical, resolvedTargetRoot);
+                if (Files.exists(targetPath)) {
+                    Files.deleteIfExists(targetPath);
+                    if (log != null) {
+                        log.info("Fresh compilation: deleted previously generated file " + canonical);
+                    }
+                }
+            } catch (Exception ex) {
+                if (log != null) {
+                    log.warn("Could not delete previously generated file " + canonical + ": " + ex.getMessage());
+                }
+            }
         }
     }
 }

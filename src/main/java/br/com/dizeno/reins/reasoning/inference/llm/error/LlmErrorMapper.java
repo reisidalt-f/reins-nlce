@@ -11,7 +11,7 @@
 
 package br.com.dizeno.reins.reasoning.inference.llm.error;
 
-import br.com.dizeno.reins.reasoning.inference.llm.providers.gemini.GeminiEmptyResponseException;
+import br.com.dizeno.reins.reasoning.inference.llm.error.LlmEmptyResponseException;
 import br.com.dizeno.reins.reasoning.inference.llm.model.LlmError;
 
 import java.io.IOException;
@@ -49,7 +49,7 @@ public class LlmErrorMapper {
             error.setRetryable(true);
             return error;
         }
-        if (throwable instanceof GeminiEmptyResponseException) {
+        if (throwable instanceof LlmEmptyResponseException) {
             error.setCategory(LlmError.Category.UNAVAILABLE);
             error.setRetryable(true);
             return error;

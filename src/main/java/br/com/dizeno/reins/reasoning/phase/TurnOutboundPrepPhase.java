@@ -62,6 +62,11 @@ public class TurnOutboundPrepPhase implements ReasoningPhase {
         List<AttachedFilePayload> outboundAttachments;
         String messageContent;
 
+        int summarizeTurns = context.getConfig() != null && context.getConfig().getReasoning() != null
+                ? context.getConfig().getReasoning().getSummarizeCycleTurns()
+                : 1;
+        boolean shouldSummarize = summarizeTurns > 0 && context.getLogicalTurn() % summarizeTurns == 0;
+
         if (spoofedScriptMessage && spoofValidationFailure == null) {
             outboundAttachments = List.of();
             messageContent = context.getNextMessage();
@@ -74,8 +79,12 @@ public class TurnOutboundPrepPhase implements ReasoningPhase {
             outboundAttachments = context.getPromptAttachments() == null
                     ? List.of()
                     : new ArrayList<>(context.getPromptAttachments());
+            String promptText = coordinator.promptBuilder.buildPrompt(context.getCycle(), context.getNextMessage(), outboundAttachments, false);
+            if (shouldSummarize) {
+                promptText = coordinator.messageFormattingService.withSummarizationInstruction(promptText);
+            }
             messageContent = coordinator.formatNextMessage(
-                    coordinator.promptBuilder.buildPrompt(context.getCycle(), context.getNextMessage(), outboundAttachments, false),
+                    promptText,
                     context.getLogicalTurn(),
                     context.getCycle().getMaxTurns(),
                     coordinator.configResolver.isTurnCountNoteEnabled(context.getConfig()),

@@ -18,7 +18,7 @@ import java.util.Map;
 
  
 /**
- * ToolExecutionType is part of the tool execution environments (like MCP tools and local file tools) exposed to LLMs in the reins architecture.
+ * ToolExecutionType is part of the tool execution environments (like tools and local file tools) exposed to LLMs in the reins architecture.
  * Acts as a component managing tool execution type.
  */
 public enum ToolExecutionType {
@@ -28,9 +28,13 @@ public enum ToolExecutionType {
     WRITE_FILE(ToolExecutionRequest.Operation.WRITE_FILE, FilePolicy.OperationToken.WRITE),
     PATCH_FILE(ToolExecutionRequest.Operation.PATCH_FILE, FilePolicy.OperationToken.PATCH),
     DELETE_FILE(ToolExecutionRequest.Operation.DELETE_FILE, FilePolicy.OperationToken.DELETE),
+    APPEND_FILE(ToolExecutionRequest.Operation.APPEND_FILE, FilePolicy.OperationToken.APPEND),
+    PREPEND_FILE(ToolExecutionRequest.Operation.PREPEND_FILE, FilePolicy.OperationToken.PREPEND),
+    MOVE_FILE(ToolExecutionRequest.Operation.MOVE_FILE, FilePolicy.OperationToken.MOVE),
+    COPY_FILE(ToolExecutionRequest.Operation.COPY_FILE, FilePolicy.OperationToken.COPY),
     RUN_SCRIPT(ToolExecutionRequest.Operation.RUN_SCRIPT, null),
-    ADD_INFERENCE_NOTE(ToolExecutionRequest.Operation.ADD_INFERENCE_NOTE, FilePolicy.OperationToken.WRITE),
-    CLEAR_INFERENCE_NOTES(ToolExecutionRequest.Operation.CLEAR_INFERENCE_NOTES, FilePolicy.OperationToken.WRITE);
+    ADD_REASONING_NOTE(ToolExecutionRequest.Operation.ADD_REASONING_NOTE, FilePolicy.OperationToken.WRITE),
+    CLEAR_REASONING_NOTES(ToolExecutionRequest.Operation.CLEAR_REASONING_NOTES, FilePolicy.OperationToken.WRITE);
 
     private final ToolExecutionRequest.Operation operation;
     private final FilePolicy.OperationToken requiredToken;

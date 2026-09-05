@@ -66,8 +66,8 @@ public class ReasoningScriptContextFactory {
         ReasoningScriptViews.SourceView sourceView = buildSourceView(request);
         ReasoningScriptViews.FileBasesView fileBasesView = buildFileBasesView(request, config);
         ReasoningScriptViews.InferenceStateView inferenceStateView = buildInferenceStateView(
-                null, Collections.emptyList(), inspectedPaths, compiledPaths, Collections.emptyList());
-        ReasoningScriptViews.ConfigView configView = buildConfigView(config, isProjectCycle, cycle);
+                request, null, Collections.emptyList(), inspectedPaths, compiledPaths, Collections.emptyList());
+        ReasoningScriptViews.ConfigView configView = buildConfigView(config, cycle);
         ReasoningScriptViews.CycleView cycleView = buildCycleView(cycle);
         ReasoningScriptViews.PolicyView policyView = buildPolicyView(policy, config, scriptRunnerEnabled);
         ReasoningScriptViews.TrackingView trackingView = buildTrackingView(request);
@@ -210,33 +210,53 @@ public class ReasoningScriptContextFactory {
 
     private ReasoningScriptViews.SourceView buildSourceView(ReasoningRequest request) {
         if (request == null) {
-            return new ReasoningScriptViews.SourceView("", "", "", "", "source", Collections.emptyList());
+            return new ReasoningScriptViews.SourceView("", "", "", "", "", "source", Collections.emptyList());
         }
-        String path = request.getSourcePath() != null ? request.getSourcePath() : "";
-        String absolutePath = "";
-        if (request.getProjectRoot() != null && !path.isEmpty()) {
-            absolutePath = request.getProjectRoot().resolve(path).toAbsolutePath().normalize().toString();
-        }
+        String qualifiedPath = request.getMainSourceQualifiedPath();
         String scope = request.getSourceScope() != null ? request.getSourceScope() : "source";
+        String rawPath = request.getSourcePath() != null ? request.getSourcePath() : "";
+        String path = rawPath;
+
+        if (qualifiedPath != null && qualifiedPath.contains(":")) {
+            int colon = qualifiedPath.indexOf(':');
+            path = qualifiedPath.substring(colon + 1);
+        } else if (request.getProjectRoot() != null && request.getBaseMappings() != null) {
+            java.nio.file.Path baseRoot = request.getBaseMappings().getSourceRoot(scope);
+            if (baseRoot != null && !rawPath.isBlank()) {
+                java.nio.file.Path abs = request.getProjectRoot().resolve(rawPath).toAbsolutePath().normalize();
+                if (abs.startsWith(baseRoot)) {
+                    path = br.com.dizeno.reins.util.PathNormalizer.toForwardSlashes(baseRoot.relativize(abs).toString());
+                }
+            }
+        }
+
+        if (qualifiedPath == null || qualifiedPath.isBlank()) {
+            qualifiedPath = scope + ":" + path;
+        }
+
+        String absolutePath = "";
+        if (request.getProjectRoot() != null && !rawPath.isEmpty()) {
+            absolutePath = request.getProjectRoot().resolve(rawPath).toAbsolutePath().normalize().toString();
+        }
         String hash = request.getSourceHash() != null ? request.getSourceHash() : "";
-        return new ReasoningScriptViews.SourceView(path, absolutePath, "", hash, scope, Collections.emptyList());
+        return new ReasoningScriptViews.SourceView(path, absolutePath, qualifiedPath, "", hash, scope, Collections.emptyList());
     }
 
     private ReasoningScriptViews.FileBasesView buildFileBasesView(
             ReasoningRequest request, ReinsConfig config) {
         String main = "", test = "", target = "", projectRoot = "";
         if (config != null) {
-            if (config.getMainNlRoot() != null)
-                main = config.getMainNlRoot().getAbsolutePath();
-            if (config.getTestNlRoot() != null)
-                test = config.getTestNlRoot().getAbsolutePath();
+            if (config.getSourceBase("main") != null)
+                main = config.getSourceBase("main").getAbsolutePath();
+            if (config.getSourceBase("test") != null)
+                test = config.getSourceBase("test").getAbsolutePath();
         }
         if (request != null && request.getProjectRoot() != null) {
             projectRoot = request.getProjectRoot().toAbsolutePath().normalize().toString();
             if (config != null && config.getTarget() != null) {
                 try {
                     target = config.getTarget()
-                            .resolveProjectTarget(request.getProjectRoot()).toString();
+                            .resolveTargetOutput("main", request.getProjectRoot()).toString();
                 } catch (Exception ignored) {
 
                 }
@@ -246,41 +266,44 @@ public class ReasoningScriptContextFactory {
     }
 
     private ReasoningScriptViews.InferenceStateView buildInferenceStateView(
+            ReasoningRequest request,
             String context,
             List<ReasoningScriptViews.TurnView> conversationHistory,
             List<String> inspectedFiles,
             List<String> compiledFiles,
             List<ReasoningScriptViews.ToolOpView> toolOperations) {
+        List<ReasoningScriptViews.CompiledSourceGroupView> compiledSourceGroups = buildCompiledSourceGroupViews(request);
         return new ReasoningScriptViews.InferenceStateView(
                 context != null ? context : "",
                 conversationHistory != null ? new ArrayList<>(conversationHistory) : Collections.emptyList(),
                 inspectedFiles != null ? new ArrayList<>(inspectedFiles) : Collections.emptyList(),
                 compiledFiles != null ? new ArrayList<>(compiledFiles) : Collections.emptyList(),
+                compiledSourceGroups,
                 toolOperations != null ? new ArrayList<>(toolOperations) : Collections.emptyList());
     }
 
+    private List<ReasoningScriptViews.CompiledSourceGroupView> buildCompiledSourceGroupViews(ReasoningRequest request) {
+        if (request == null || request.getEagerlyProvide() == null || request.getEagerlyProvide().getCompiledSourceGroups() == null) {
+            return Collections.emptyList();
+        }
+        List<br.com.dizeno.reins.reasoning.CompiledSourceGroup> groups = request.getEagerlyProvide().getCompiledSourceGroups();
+        List<ReasoningScriptViews.CompiledSourceGroupView> views = new ArrayList<>(groups.size());
+        for (br.com.dizeno.reins.reasoning.CompiledSourceGroup g : groups) {
+            List<String> paths = g.getCompiledAttachments().stream()
+                    .map(AttachedFilePayload::getQualifiedPath)
+                    .filter(p -> p != null && !p.isBlank())
+                    .collect(Collectors.toList());
+            views.add(new ReasoningScriptViews.CompiledSourceGroupView(
+                    g.getSourceCanonicalPath(),
+                    g.getSourceSimpleName(),
+                    paths));
+        }
+        return views;
+    }
+
     private ReasoningScriptViews.ConfigView buildConfigView(
-            ReinsConfig config, boolean isProjectCycle, ReasoningCycle cycle) {
-        if (config == null) {
-            return new ReasoningScriptViews.ConfigView(
-                    "unknown", null, false, isProjectCycle, false, false, false, false, null);
-        }
-        String model = config.resolveModel();
-        if (model == null) {
-            model = "unknown";
-        }
-        String provider = config.getProvider();
-        boolean isGemini = provider == null || "gemini".equalsIgnoreCase(provider.trim());
-        Integer maxTurns = cycle != null && cycle.getMaxTurns() > 0
-                ? cycle.getMaxTurns()
-                : (isGemini && config.getGemini() != null ? config.getGemini().resolveMaximumTurns() : (config.getReasoning() != null ? config.getReasoning().getMaxTurns() : null));
-        boolean thinkingOutLoud = config.getReasoning() != null
-                && config.getReasoning().isThinkingOutLoud();
-        boolean addReasoningNotes = config.getTooling() != null && config.getTooling().isAddReasoningNotes();
-        return new ReasoningScriptViews.ConfigView(
-                model, maxTurns, thinkingOutLoud, isProjectCycle,
-                config.isFailOnError(), config.isVerbose(), config.isDryRun(), addReasoningNotes,
-                config.getReasoning() == null ? null : config.getReasoning().getScriptsPath());
+            ReinsConfig config, ReasoningCycle cycle) {
+        return new ReasoningScriptViews.ConfigView(config);
     }
 
     private ReasoningScriptViews.CycleView buildCycleView(ReasoningCycle cycle) {
@@ -310,6 +333,10 @@ public class ReasoningScriptContextFactory {
         List<String> writeBases = basesAsList(policy, ToolExecutionType.WRITE_FILE);
         List<String> patchBases = basesAsList(policy, ToolExecutionType.PATCH_FILE);
         List<String> deleteBases = basesAsList(policy, ToolExecutionType.DELETE_FILE);
+        List<String> appendBases = basesAsList(policy, ToolExecutionType.APPEND_FILE);
+        List<String> prependBases = basesAsList(policy, ToolExecutionType.PREPEND_FILE);
+        List<String> moveBases = basesAsList(policy, ToolExecutionType.MOVE_FILE);
+        List<String> copyBases = basesAsList(policy, ToolExecutionType.COPY_FILE);
         List<String> listGenBases = basesAsList(policy, ToolExecutionType.LIST_COMPILED_FILES);
 
         boolean fileListingAndReadingEnabled = !listBases.isEmpty()
@@ -317,7 +344,11 @@ public class ReasoningScriptContextFactory {
                 || !listGenBases.isEmpty();
         boolean fileMutatingEnabled = !writeBases.isEmpty()
                 || !patchBases.isEmpty()
-                || !deleteBases.isEmpty();
+                || !deleteBases.isEmpty()
+                || !appendBases.isEmpty()
+                || !prependBases.isEmpty()
+                || !moveBases.isEmpty()
+                || !copyBases.isEmpty();
         boolean scriptRunEnabled = scriptRunnerEnabled;
 
         boolean addReasoningNotesEnabled = config != null && config.getTooling() != null
@@ -332,7 +363,8 @@ public class ReasoningScriptContextFactory {
                 addReasoningNotesEnabled);
 
         return new ReasoningScriptViews.PolicyView(
-                listBases, readBases, writeBases, patchBases, deleteBases, listGenBases,
+                listBases, readBases, writeBases, patchBases, deleteBases,
+                appendBases, prependBases, moveBases, copyBases, listGenBases,
                 scriptRunnerEnabled, toolOpsReference);
     }
 

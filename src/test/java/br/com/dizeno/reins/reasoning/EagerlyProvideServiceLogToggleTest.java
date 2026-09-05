@@ -40,11 +40,12 @@ class EagerlyProvideServiceLogToggleTest {
         EagerlyProvideService service = new EagerlyProvideService();
         SourceTrackingRecord record = createRecordWithCompiledFile();
         EagerlyProvideSettings settings = new EagerlyProvideSettings();
-        settings.setPreviouslyCompiledFiles(true);
-        settings.setPreviouslyInspectedFiles(false);
+        ContextSettings context = new ContextSettings();
+        context.setCompiledFiles(true);
+        context.setInspectedFiles(false);
         RecordingLog log = new RecordingLog();
 
-        EagerlyProvideResult result = service.build(record, settings, false, projectRoot, new PathValidator(projectRoot), log);
+        EagerlyProvideResult result = service.build(record, settings, context, false, projectRoot, new PathValidator(projectRoot), log);
 
         assertEquals(1, result.getCompiledAttachments().size());
         assertEquals(1, result.getCompiledSourceGroups().size());
@@ -57,11 +58,12 @@ class EagerlyProvideServiceLogToggleTest {
         EagerlyProvideService service = new EagerlyProvideService();
         SourceTrackingRecord record = createRecordWithCompiledFile();
         EagerlyProvideSettings settings = new EagerlyProvideSettings();
-        settings.setPreviouslyCompiledFiles(true);
-        settings.setPreviouslyInspectedFiles(false);
+        ContextSettings context = new ContextSettings();
+        context.setCompiledFiles(true);
+        context.setInspectedFiles(false);
         RecordingLog log = new RecordingLog();
 
-        EagerlyProvideResult result = service.build(record, settings, true, projectRoot, new PathValidator(projectRoot), log);
+        EagerlyProvideResult result = service.build(record, settings, context, true, projectRoot, new PathValidator(projectRoot), log);
 
         assertEquals(1, result.getCompiledAttachments().size());
         assertEquals(1, result.getCompiledSourceGroups().size());

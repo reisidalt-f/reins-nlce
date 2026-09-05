@@ -14,6 +14,7 @@ package br.com.dizeno.reins.reasoning.inference.llm.registry;
 import br.com.dizeno.reins.run.config.*;
 import br.com.dizeno.reins.reasoning.inference.llm.adapters.GeminiProviderAdapter;
 import br.com.dizeno.reins.reasoning.inference.llm.adapters.OllamaProviderAdapter;
+import br.com.dizeno.reins.reasoning.inference.llm.adapters.OpenAiProviderAdapter;
 import br.com.dizeno.reins.reasoning.inference.llm.adapters.StubProviderAdapter;
 import br.com.dizeno.reins.reasoning.inference.llm.error.LlmServiceException;
 import br.com.dizeno.reins.reasoning.inference.llm.model.AdapterValidationResult;
@@ -41,6 +42,7 @@ public class DefaultAdapterRegistry {
     public DefaultAdapterRegistry() {
         register(new GeminiProviderAdapter());
         register(new OllamaProviderAdapter());
+        register(new OpenAiProviderAdapter());
         register(new StubProviderAdapter());
     }
 
@@ -58,6 +60,10 @@ public class DefaultAdapterRegistry {
         ProviderAdapter ollama = adapters.get("ollama");
         if (ollama instanceof OllamaProviderAdapter ollamaProviderAdapter) {
             ollamaProviderAdapter.setLog(log);
+        }
+        ProviderAdapter openai = adapters.get("openai");
+        if (openai instanceof OpenAiProviderAdapter openAiProviderAdapter) {
+            openAiProviderAdapter.setLog(log);
         }
     }
 
@@ -110,9 +116,14 @@ public class DefaultAdapterRegistry {
      * @param config the Reins configuration settings
      */
     public void validateConfiguredAdapters(ReinsConfig config) throws LlmServiceException {
-        String selectedProvider = config == null || config.getProvider() == null || config.getProvider().isBlank()
-                ? "gemini"
-                : config.getProvider().trim().toLowerCase(Locale.ROOT);
+        if (config == null || config.getProvider() == null || config.getProvider().isBlank()) {
+            LlmError error = new LlmError();
+            error.setCategory(LlmError.Category.COMPATIBILITY);
+            error.setRetryable(false);
+            error.setMessage("Provider is not configured");
+            throw new LlmServiceException(error);
+        }
+        String selectedProvider = config.getProvider().trim().toLowerCase(Locale.ROOT);
         ProviderAdapter selected = get(selectedProvider);
         if (selected == null) {
             LlmError error = new LlmError();

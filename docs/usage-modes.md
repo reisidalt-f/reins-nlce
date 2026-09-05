@@ -21,6 +21,12 @@ If using a remote Ollama server, export your Ollama credentials instead:
 export OLLAMA_API_KEY="your-actual-api-key"
 ```
 
+If using OpenAI:
+
+```bash
+export OPENAI_API_KEY="your-actual-api-key"
+```
+
 ---
 
 ## 1. Build Tools Integration: Maven Plugin
@@ -63,40 +69,47 @@ mvn reins:compile
 
 ---
 
-## 2. Command Line Tool (CLI)
+### Installing the `reins` Launcher Script
 
-Reins packages a self-contained CLI entry point, allowing you to run compilation cycles directly from a terminal without Maven wrapper projects.
+Running `mvn install` on the `reins-nlce` project automatically installs the `reins` shell script into `~/.local/bin/reins`. Make sure `~/.local/bin` is in your `PATH`.
 
-### How Configuration is Loaded by CLI
+Once installed, you can simply run:
 
-When invoking a CLI command, Reins automatically looks in the working directory for a default configuration file in one of these formats:
-1. `reins.yaml` / `reins.yml`
-2. `reins.json`
-3. `reins.xml`
-4. `reins.properties`
-
-Alternatively, specify any configuration file path using the `--config` option.
+```bash
+reins <command> [options]
+```
 
 ### CLI Command Execution Structure
 
+You can run the CLI using the `reins` helper command:
+
 ```bash
-java -cp reins-nlce-plugin-0.0.1-SNAPSHOT.jar br.com.dizeno.reins.run.cli.ReinsCli <command> [options]
+reins <command> [options]
+```
+
+Or directly via `java` with classpath:
+
+```bash
+java -cp ~/.m2/repository/br/com/dizeno/reins-nlce/0.0.1-SNAPSHOT/reins-nlce-0.0.1-SNAPSHOT.jar br.com.dizeno.reins.run.cli.ReinsCli <command> [options]
 ```
 
 ### Supported Commands
 
 * `compile`: Compiles scanned Markdown source files.
 * `clean`: Deletes generated outputs and tracking manifests.
-* `add-note` / `addnote`: Appends a corrective note to a source file's metadata tracker.
+* `add-note`: Appends a reasoning note to a source file's metadata tracker.
+* `list-notes`: Lists reasoning notes for specific or all scanned sources.
+* `clear-notes`: Clears reasoning notes for specific or all scanned sources.
 
 ### Command Options
 
 * `--config <file>`: Path to your JSON, YAML, XML, or Properties configuration file.
-* `--provider <name>`: LLM provider override (`gemini`, `ollama`).
+* `--provider <name>`: LLM provider override (`gemini`, `openai`, `ollama`).
+* `--compilationThreads <N>`: Number of simultaneous compilation threads (default: 1).
 * `--verbose`: Activates verbose logging diagnostics.
 * `--dryRun`: Runs analysis, file scans, and queries without writing output files.
 * `--failOnError`: Fails immediately if any compilation phase throws exceptions.
-* `--source <path>`: Specifies explicit compilation source directories or files (also used to designate the target for `add-note`).
+* `--source <path>`: Specifies explicit source directories, files, or glob patterns (e.g. `domain/*.md`, `main:services/**/*.md`) for `compile`, `clean`, `add-note`, `list-notes`, or `clear-notes` (accepts comma-separated values or repeated `--source` flags). When omitted for `list-notes` or `clear-notes`, operates on every scanned source file.
 * `--note <text>`: The note content string (required for `add-note`).
 
 ### CLI Usage Examples
@@ -104,31 +117,47 @@ java -cp reins-nlce-plugin-0.0.1-SNAPSHOT.jar br.com.dizeno.reins.run.cli.ReinsC
 * **Basic Compilation (using auto-discovered `reins.yaml` in current folder):**
   
   ```bash
-  java -cp target/reins-nlce-plugin-0.0.1-SNAPSHOT.jar br.com.dizeno.reins.run.cli.ReinsCli compile
+  reins compile
   ```
   
 * **Compilation with Custom Config and Local Ollama Provider:**
   
   ```bash
-  java -cp target/reins-nlce-plugin-0.0.1-SNAPSHOT.jar br.com.dizeno.reins.run.cli.ReinsCli compile \
+  reins compile \
     --config custom-config.json \
     --provider ollama \
     --verbose
   ```
   
-* **Explicit Source Mode:**
-  Compiles only a single source file under the scan roots:
+* **Compilation with OpenAI Provider:**
   
   ```bash
-  java -cp target/reins-nlce-plugin-0.0.1-SNAPSHOT.jar br.com.dizeno.reins.run.cli.ReinsCli compile \
-    --source domain/Customer.md
+  reins compile \
+    --provider openai \
+    --verbose
+  ```
+  
+* **Explicit Source Mode (Single or Multiple Sources):**
+  Compiles specified source file(s) or directory entries under the scan roots (comma-separated or repeated `--source` flags):
+  
+  ```bash
+  reins compile \
+    --source domain/Customer.md,domain/Order.md
+  ```
+  
+  or using repeated flags:
+  
+  ```bash
+  reins compile \
+    --source domain/Customer.md \
+    --source domain/Order.md
   ```
   
 * **Validating with a Dry Run:**
   Performs directory scanning and resolves imports to check for dependency cycles without querying the LLM or writing any files to disk:
   
   ```bash
-  java -cp target/reins-nlce-plugin-0.0.1-SNAPSHOT.jar br.com.dizeno.reins.run.cli.ReinsCli compile \
+  reins compile \
     --dryRun
   ```
   
@@ -136,16 +165,23 @@ java -cp reins-nlce-plugin-0.0.1-SNAPSHOT.jar br.com.dizeno.reins.run.cli.ReinsC
   Appends an inline instruction to the tracker database for `Customer.md`, forcing it to re-trigger compilation on the next compile execution:
   
   ```bash
-  java -cp target/reins-nlce-plugin-0.0.1-SNAPSHOT.jar br.com.dizeno.reins.run.cli.ReinsCli add-note \
+  reins add-note \
     --source src/main/nl/domain/Customer.md \
     --note "Rename the customer ID field to customerUuid and verify references."
   ```
   
-* **Cleaning Generated Files:**
+* **Cleaning All Generated Files:**
   Deletes all generated Java files and assets tracked in the manifest, logging each deletion:
   ```bash
-  java -cp target/reins-nlce-plugin-0.0.1-SNAPSHOT.jar br.com.dizeno.reins.run.cli.ReinsCli clean \
+  reins clean \
     --verbose
+  ```
+
+* **Cleaning Generated Files for a Specific Source:**
+  Deletes only the generated files and tracking manifest associated with a specific source file or directory:
+  ```bash
+  reins clean \
+    --source domain/Customer.md
   ```
 
 ### Example Configuration File (`reins.yaml`)
@@ -158,6 +194,7 @@ gemini:
   apiKey: "${env.GEMINI_API_KEY}"
   model: gemini-2.0-flash
   timeoutSeconds: 45
+compilationThreads: 4
 tooling:
   main: list,list_compiled,read
   test: list,list_compiled,read

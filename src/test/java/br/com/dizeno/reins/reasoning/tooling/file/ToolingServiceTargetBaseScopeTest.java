@@ -64,7 +64,7 @@ class ToolingServiceTargetBaseScopeTest {
     @Test
     void failFastBatchValidationPreventsAnyMutationWhenMixedScopeExists() throws Exception {
         br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver();
-        br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService = new br.com.dizeno.reins.reasoning.tooling.ToolingService();
+        br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService = new br.com.dizeno.reins.reasoning.tooling.ToolingService();
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest allowed = new br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest();
         allowed.setOperation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.WRITE_FILE);
@@ -79,7 +79,7 @@ class ToolingServiceTargetBaseScopeTest {
         invalid.setContent("# forbidden\n");
 
         List<br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest> batch = List.of(allowed, invalid);
-        boolean hasViolation = batch.stream().anyMatch(r -> mcpService.validateMutationScope(r, resolver) != null);
+        boolean hasViolation = batch.stream().anyMatch(r -> toolingService.validateMutationScope(r, resolver) != null);
 
         assertTrue(hasViolation);
         assertFalse(Files.exists(tempDir.resolve("src/main/java/demo/ShouldNotBeWritten.java")));
@@ -102,18 +102,19 @@ class ToolingServiceTargetBaseScopeTest {
 
     @Test
     void targetListCompiledTokenAllowsCompiledListingWithoutDirectoryListing() {
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
+        FileToolsSettings settings = new FileToolsSettings();
         settings.setTarget("list_compiled");
         br.com.dizeno.reins.reasoning.tooling.file.FilePolicy policy = new br.com.dizeno.reins.reasoning.tooling.file.FilePolicy(settings);
 
         assertTrue(policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.LIST_COMPILED_FILES, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET));
         assertFalse(policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.LIST_FILES, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET));
-        assertTrue(policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET));
+        assertFalse(policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET),
+            "write_file should be denied on target when write is not in config");
     }
 
     @Test
     void targetListTokenDoesNotAllowCompiledListing() {
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
+        FileToolsSettings settings = new FileToolsSettings();
         settings.setTarget("list");
         br.com.dizeno.reins.reasoning.tooling.file.FilePolicy policy = new br.com.dizeno.reins.reasoning.tooling.file.FilePolicy(settings);
 

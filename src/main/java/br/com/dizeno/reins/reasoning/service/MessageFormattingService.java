@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * MessageFormattingService is part of the extracted reasoning helper services for scripts, attachments, MCP tools, configuration, and state in the reins architecture.
+ * MessageFormattingService is part of the extracted reasoning helper services for scripts, attachments, tools, configuration, and state in the reins architecture.
  * Acts as a service component responsible for managing and executing operations related to its prefix.
  */
 public class MessageFormattingService {
@@ -65,12 +65,33 @@ public class MessageFormattingService {
         String note = "Turn " + turnIndex + "/" + maxTurns;
         if (turnIndex >= maxTurns) {
             note = note + "\n"
-                    + "Respond with a finish-success message requesting the MCP operations needed to complete the task or a finish-error with a message to the user indicating the failure. You should not wait for the results of the MCP operations, the task will be considered complete if all MCP operations succeed.";
+                    + "Respond with a finish-success message requesting the tool operations needed to complete the task or a finish-error with a message to the user indicating the failure. You should not wait for the results of the tool operations, the task will be considered complete if all tool operations succeed.";
         }
         if (base.isBlank()) {
             return note;
         }
         return base + "\n\n" + note;
+    }
+
+    /**
+     * Appends conversation summarization instruction to outbound turn message.
+     *
+     * @param message the message content
+     * @return the string result with summarization instruction appended
+     */
+    public String withSummarizationInstruction(String message) {
+        String base = message == null ? "" : message.trim();
+        String instruction = "Please summarize the conversation in your response along with the answer/result of the main requested action, keeping enough information of:\n"
+                + "  - the goal of the reasoning\n"
+                + "  - what is available that is relevant\n"
+                + "  - how to achieve the goal with what is available\n"
+                + "  - what has been done so far\n"
+                + "  - what needs to be done or to be gathered\n"
+                + "  - gathered information: a cumulative, detailed list of every piece of information gathered so far that is important to accomplish the goal, including what was gathered, from where, and why it is needed. Maintain all items from the previous turn summary and append newly gathered details so content does not need to be re-inspected.";
+        if (base.isBlank()) {
+            return instruction;
+        }
+        return base + "\n\n" + instruction;
     }
 
     /**

@@ -9,28 +9,32 @@ The tables and XML schemas below apply uniformly across **CLI**, **Library**, an
 ```xml
 <configuration>
   <!-- Main Controls -->
-  <provider>gemini</provider> <!-- Options: gemini, ollama -->
-  <scanRoots>
-    <scanRoot>src/main/nl</scanRoot>
-    <scanRoot>src/test/nl</scanRoot>
-  </scanRoots>
+  <provider>gemini</provider> <!-- Options: gemini, openai, ollama, stub -->
+  
+  <!-- Named Source Base Group (Required: source.main) -->
+  <source>
+    <main>${project.basedir}/src/main/nl</main>
+    <test>${project.basedir}/src/test/nl</test>
+    <lib>${project.basedir}/src/lib/nl</lib>
+  </source>
+  
+  <skipTest>false</skipTest> <!-- CLI: -DskipTest / --skipTest -->
   <includePattern>**/*.md</includePattern>
-  <mainNlRoot>${project.basedir}/src/main/nl</mainNlRoot>
-  <testNlRoot>${project.basedir}/src/test/nl</testNlRoot>
   <source>domain/Customer.md</source>
+  <note>Fix API signatures for customer module</note> <!-- CLI: -Dnote / --note -->
 
-  <projectContextFile>${project.basedir}/project.md</projectContextFile>
-  <enableProjectInference>false</enableProjectInference>
   <failOnError>false</failOnError>
   <verbose>false</verbose>
   <dryRun>false</dryRun>
   <validateAll>false</validateAll>
+  <compilationThreads>1</compilationThreads> <!-- Number of simultaneous compilation threads (default: 1) -->
+  <freshCompilation>false</freshCompilation>   <!-- Force full recompilation ignoring prior tracking hashes -->
 
-  <!-- Target Paths Config (All parameters under <target> are optional) -->
+  <!-- Mandatory Target Paths Config (Every active source.<name> must have a matching target.<name>) -->
   <target>
-    <project>${project.basedir}</project> <!-- Base target directory (replaces deprecated root; defaults to project base dir) -->
-    <main>src/main/java</main>            <!-- Main code output path (defaults to src/main/java; accepts absolute paths within project root) -->
-    <test>src/test/java</test>            <!-- Test code output path (defaults to src/test/java; accepts absolute paths within project root) -->
+    <main>src/main/java</main>            <!-- Target code output path for source.main -->
+    <test>src/test/java</test>            <!-- Target code output path for source.test -->
+    <lib>src/lib/java</lib>               <!-- Target code output path for source.lib -->
   </target>
 
   <!-- Gemini LLM Config -->
@@ -51,10 +55,20 @@ The tables and XML schemas below apply uniformly across **CLI**, **Library**, an
     </generation>
   </gemini>
 
+  <!-- OpenAI Config -->
+  <openai>
+    <apiKey>${env.OPENAI_API_KEY}</apiKey>
+    <model>gpt-4o</model>
+    <endpoint>https://api.openai.com</endpoint>
+    <timeoutSeconds>60</timeoutSeconds>
+    <retryAttempts>3</retryAttempts>
+  </openai>
+
   <!-- Ollama Local Config -->
   <ollama>
     <model>codegemma</model>
     <endpoint>http://localhost:11434</endpoint>
+    <apiKey></apiKey>
     <timeoutSeconds>60</timeoutSeconds>
     <retryAttempts>2</retryAttempts>
     <options>
@@ -64,19 +78,27 @@ The tables and XML schemas below apply uniformly across **CLI**, **Library**, an
 
   <!-- Context & Ref Parsing -->
   <context>
-    <includeProjectFiles>false</includeProjectFiles>
-    <attachReferencedFiles>true</attachReferencedFiles>
     <cachedContent>true</cachedContent>
     <allowScriptedMessageData>true</allowScriptedMessageData>
     <allowScriptedAttachments>true</allowScriptedAttachments>
-    <referencesTreeDepth>1</referencesTreeDepth> <!-- Options: 0, integer, * -->
+    <compiledFiles>true</compiledFiles>
+    <inspectedFiles>true</inspectedFiles>
+    <plainAttachmentExtensions>json,py,rs</plainAttachmentExtensions> <!-- Additional text file extensions formatted as plain text -->
+    <referencesTree>
+      <attachFiles>false</attachFiles> <!-- Toggle attaching referenced files to LLM context (default: false) -->
+      <depth>3</depth> <!-- Reference tree depth: 0, integer, * (default: 3) -->
+      <maxDepth>8</maxDepth> <!-- Max safety cap limit for traversal depth (default: 8) -->
+    </referencesTree>
     <sources>
-      <sourceFile>docs/architecture.md</sourceFile>
+      <source pattern="**/domain/*.md" phase="initial-context, verification">
+        <file>docs/architecture.md</file>
+      </source>
     </sources>
   </context>
 
   <!-- Multi-Turn / Custom Orchestration Scripting -->
   <reasoning>
+    <enabled>true</enabled>
     <maxTurns>10</maxTurns>
     <maxReferenceDepth>8</maxReferenceDepth>
     <scriptsPath>scripts/reins</scriptsPath>
@@ -85,15 +107,17 @@ The tables and XML schemas below apply uniformly across **CLI**, **Library**, an
     <logParseErrorRecovery>false</logParseErrorRecovery>
     <enableReasoningLog>false</enableReasoningLog>
     <turnCountNote>true</turnCountNote>
+    <summarizeCycleTurns>0</summarizeCycleTurns> <!-- Turn interval for conversation summarization (default: 0 = disabled) -->
   </reasoning>
 
   <!-- Tool Access permissions -->
   <tooling>
     <main>list,list_compiled,read</main>
     <test>list,list_compiled,read</test>
-    <target>list,patch,delete</target>
+    <target>list,read,write,patch,delete</target>
     <scriptPath>scripts/reins</scriptPath>
     <addReasoningNotes>true</addReasoningNotes>
+    <grantFileOwnership>true</grantFileOwnership>
   </tooling>
 
   <!-- Recompilation Fine-Tuning -->
@@ -104,13 +128,12 @@ The tables and XML schemas below apply uniformly across **CLI**, **Library**, an
   </recompileOn>
 
   <eagerlyProvide>
-    <previouslyCompiledFiles>true</previouslyCompiledFiles>
-    <previouslyInspectedFiles>true</previouslyInspectedFiles>
     <maxAttachmentSizeBytes>0</maxAttachmentSizeBytes>
   </eagerlyProvide>
 
   <tracking>
     <freezeState>false</freezeState>
+    <cleanupStaleCompiledFiles>false</cleanupStaleCompiledFiles>
   </tracking>
 
   <!-- Diagnostics -->
@@ -121,7 +144,22 @@ The tables and XML schemas below apply uniformly across **CLI**, **Library**, an
     <fileMutating>false</fileMutating>
     <scriptRun>false</scriptRun>
     <selectionReason>false</selectionReason>
+    <result>false</result>
+    <trackingFile>false</trackingFile>
+    <llmProvider>false</llmProvider>
+    <sourceTag>false</sourceTag>
   </logging>
+
+  <log>
+    <skipped>false</skipped>
+    <processingOrder>false</processingOrder>
+    <eagerlyProvided>false</eagerlyProvided>
+  </log>
+
+  <!-- Model Request/Response Logging -->
+  <model>
+    <requestResponseLog>false</requestResponseLog>
+  </model>
 </configuration>
 ```
 
@@ -129,136 +167,182 @@ The tables and XML schemas below apply uniformly across **CLI**, **Library**, an
 
 ## Detailed Parameter Index
 
-### 1. Top-Level Parameters
+### 1. Top-Level & Source Base Parameters
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `provider` | `String` | `gemini` | Target LLM driver. Supported: `gemini`, `ollama`, `stub` (testing). |
-| `scanRoots` | `List<File>` | `src/main/nl`, `src/test/nl` | Root directories scanned for Markdown files. |
-| `includePattern` | `String` | `**/*.md` | Inclusion glob applied when scanning directories. |
-| `mainNlRoot` | `File` | `src/main/nl` | Base root for resolving main source texts. |
-| `testNlRoot` | `File` | `src/test/nl` | Base root for resolving test source texts. |
-| `source` | `String` | unset | Relative path to activate **Explicit Source Mode** for direct compilation targets. |
-| `projectContextFile` | `File` | `project.md` | Base Markdown file project-wide source text. |
-| `enableProjectInference` | `boolean` | `false` | Enables project-level context evaluation during compilation runs. |
+| `provider` | `String` | **None** (Required) | Target LLM driver. Mandatory. Supported: `gemini`, `openai`, `ollama`, `stub` (testing). |
+| `source.main` | `Path` | **None** (Required) | Base root directory for main natural language sources. Mandatory. |
+| `source.test` | `Path` | **None** (Optional) | Base root directory for test natural language sources. |
+| `source.<name>` | `Path` | **None** (Optional) | Custom named source base directories (e.g., `source.lib`, `source.include`). |
+| `skipTest` | `boolean` | `false` | CLI flag (`-DskipTest` or `--skipTest`) to disable scanning and compilation of `test` base. |
+| `includePattern` | `String` | `**/*.md` | Inclusion glob applied when scanning source base directories. |
+| `source` | `String` | unset | Explicit source target selection. Supports scheme prefixes (e.g. `lib:domain/Customer.md`) and base-root paths (`/domain/Customer.md`). Used for explicit mode during `compile` or `clean`, and to designate the target for `add-note`. |
+| `note` | `String` | unset | User/CLI guidance note attached to explicit source compilation or `add-note` executions. |
 | `failOnError` | `boolean` | `false` | If true, compilation errors fail the execution immediately. |
 | `verbose` | `boolean` | `false` | Enables diagnostic logging detailing execution pipelines. |
 | `dryRun` | `boolean` | `false` | Runs validation and scanners without writing code to disk. |
 | `validateAll` | `boolean` | `false` | If true, skipped and valid records are validated on disk. |
+| `compilationThreads` | `int` | `1` | Number of simultaneous file compilation threads executed in parallel while respecting the directed dependency graph (`-DcompilationThreads` / `--compilationThreads`). Must be `>= 1`. |
+| `freshCompilation` | `boolean` | `false` | Force fresh compilation ignoring existing tracking checksums (`-DfreshCompilation` / `--freshCompilation`). |
 
-### 2. Gemini Configuration Settings (`<gemini>`)
+---
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `apiKey` | `String` | Required | Gemini cloud platform credential. |
-| `model` | `String` | unset | Selected model version (e.g., `gemini-2.0-flash`, `gemini-2.5-pro`). |
-| `endpoint` | `String` | unset | Base API host address (must be absolute HTTP/HTTPS URL). |
-| `timeoutSeconds` | `int` | `30` | Network request timeout limits. |
-| `retryAttempts` | `int` | `3` | Number of times to retry failed requests. Negative numbers clamp to 0. |
-| `emptyResponseRetryDelayMs` | `int` | `1000` | Back-off delay when recovering from empty model response packets. |
-| `maximumTurns` | `Integer` | `1` | Turn limits enforced for single execution sequences. |
-
-#### Gemini Generation Configuration (`<gemini.generation>`)
-
-| Parameter | Type | Range | Description |
-|---|---|---|---|
-| `temperature` | `Float` | `0.0` to `2.0` | Controls output creativity/determinism. Lower is more deterministic. |
-| `topP` | `Float` | `0.0` to `1.0` | Nucleus sampling probability threshold. |
-| `topK` | `Integer` | `>= 1` | Top-k tokens considered during generation selection. |
-| `presencePenalty` | `Float` | `-2.0` to `2.0` | Penalty applied to tokens already appearing in generated text. |
-| `frequencyPenalty` | `Float` | `-2.0` to `2.0` | Penalty applied based on token repetition rate. |
-
-### 3. Ollama Configuration Settings (`<ollama>`)
+### 2. Target Paths Configuration (`<target>`)
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `model` | `String` | unset | Model instance identifier loaded in local Ollama service. |
-| `endpoint` | `String` | unset | Endpoint targeting the Ollama service. |
-| `apiKey` | `String` | unset | Optional authorization key for secured local proxies. |
-| `timeoutSeconds` | `int` | `60` | Request timeout limit. |
-| `retryAttempts` | `int` | `3` | Request retry limit. |
-| `options` | `Map<String, Object>`| empty | Map of custom configuration variables sent directly to Ollama. |
+| `target.main` | `String` | **None** (Required) | Target code output directory relative to project root for `source.main`. |
+| `target.test` | `String` | **None** (Required if `source.test` present) | Target code output directory relative to project root for `source.test`. |
+| `target.<name>` | `String` | **None** (Required for `source.<name>`) | Target code output directory relative to project root for custom `source.<name>`. |
 
-### 4. Context Configuration Settings (`<context>`)
+*Note: Reins enforces that **every registered `source.<name>` must have a corresponding `target.<name>` path configured**. Hardcoded defaults have been completely removed.*
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `includeProjectFiles` | `boolean` | `false` | Attaches project files to the inference prompts. |
-| `attachReferencedFiles` | `boolean` | `true` | Injects referenced source files directly into prompts. |
-| `cachedContent` | `boolean` | `true` | Enables semantic client caching for repeat prompts. |
-| `allowScriptedMessageData`| `boolean` | `true` | Permits inference scripts to structure custom prompt payloads. |
-| `allowScriptedAttachments`| `boolean` | `true` | Allows inference scripts to append supplemental attachments. |
-| `referencesTreeDepth` | `String` | `1` | Graph traversal limit. Valid values: `0` (disabled), positive integer, or `*` (infinite). |
-| `sources` | `List<File>` | empty | List of supplementary source files (e.g., rules, target specs) attached as context. |
+---
 
-### 5. Reasoning Settings (`<reasoning>`)
+### 4. LLM Provider Configurations
+
+#### Gemini Configuration Settings (`<gemini>`)
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `maxTurns` | `int` | `10` | Maximum multi-turn conversation rounds permitted before forced completion. |
-| `maxReferenceDepth` | `int` | `8` | Deepest source reference level resolved when building graphs. |
-| `scriptsPath` | `String` | unset | Path to custom FreeMarker scripts directory, overriding defaults. |
-| `thinkingOutLoud` | `boolean` | `false` | Enables verbose logging of LLM reasoning traces. |
-| `logSystemContext` | `boolean` | `false` | Logs resolved FreeMarker system prompts. |
-| `logParseErrorRecovery` | `boolean` | `false` | Prints parsing diagnostics when recovering from malformed model responses. |
-| `enableReasoningLog` | `boolean` | `false` | Creates dedicated session conversation logs inside `.reins/logs`. |
-| `turnCountNote` | `boolean` | `true` | Appends turn-warning signals to the prompt as maxTurns approaches. |
+| `gemini.apiKey` | `String` | unset | Gemini platform API key. |
+| `gemini.model` | `String` | unset | Gemini model identifier (e.g. `gemini-2.0-flash`). |
+| `gemini.endpoint` | `String` | `https://generativelanguage.googleapis.com` | Base endpoint URL for Gemini API requests. |
+| `gemini.timeoutSeconds` | `int` | `30` | Network request timeout limit in seconds. |
+| `gemini.retryAttempts` | `int` | `3` | Number of retry attempts on network or HTTP errors. |
+| `gemini.emptyResponseRetryDelayMs` | `int` | `1000` | Delay in milliseconds before retrying after an empty response. |
+| `gemini.maximumTurns` | `Integer` | `1` | Maximum turns override for Gemini multi-turn reasoning cycles. |
+| `gemini.generation.temperature` | `Float` | unset | Sampling temperature. |
+| `gemini.generation.topP` | `Float` | unset | Nucleus sampling parameter. |
+| `gemini.generation.topK` | `int` | unset | Top-K sampling parameter. |
+| `gemini.generation.presencePenalty` | `Float` | unset | Presence penalty parameter. |
+| `gemini.generation.frequencyPenalty` | `Float` | unset | Frequency penalty parameter. |
 
-### 6. Tooling Configuration Settings (`<tooling>`)
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `main` | `String` | unset | Comma-separated list of permitted tool operations on `src/main`. |
-| `test` | `String` | unset | Comma-separated list of permitted tool operations on `src/test`. |
-| `target` | `String` | unset | Comma-separated list of permitted tool operations on compiled outputs. |
-| `scriptPath` | `String` | unset | Directory path containing executable scripts for the `run_script` tool. |
-| `addReasoningNotes` | `boolean` | `false` | Enables automated notes injection through inference scripts. |
-
-*Permitted tool tokens for `main`, `test`, `target` include:* `list`, `list_compiled`, `read`, `write`, `patch`, `delete`.
-
-### 7. Target Paths Configuration (`<target>`)
-
-All parameters inside the `<target>` configuration block are **optional**.
+#### OpenAI Configuration Settings (`<openai>`)
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `project` | `File` | project base dir | Optional. Base directory for compilation output resolution (replaces deprecated `root`). Resolves relative to the project base directory unless an absolute path is provided. |
-| `root` | `File` | project base dir | Optional (Deprecated). Fallback base directory for compilation output resolution. |
-| `main` | `String` | `src/main/java` | Optional. Sub-path/directory for generated main sources. Accepts absolute paths, but they must resolve to a location inside the project's base directory. If a relative path is provided, it resolves relative to the project's base directory. |
-| `test` | `String` | `src/test/java` | Optional. Sub-path/directory for generated test sources. Accepts absolute paths, but they must resolve to a location inside the project's base directory. If a relative path is provided, it resolves relative to the project's base directory. |
+| `openai.model` | `String` | unset | OpenAI model version (e.g., `gpt-4o`, `gpt-4-turbo`). |
+| `openai.endpoint` | `String` | `https://api.openai.com` | Base API endpoint for OpenAI. |
+| `openai.apiKey` | `String` | unset | OpenAI platform credential. |
+| `openai.timeoutSeconds` | `int` | `60` | Network request timeout limits. |
+| `openai.retryAttempts` | `int` | `3` | Number of times to retry failed requests. |
+| `openai.options` | `Map` | empty | Map of custom configuration variables sent directly to OpenAI. |
 
-### 8. Fine-Tuned Tracking & Logging
+#### Ollama Configuration Settings (`<ollama>`)
 
-* **`<recompileOn>`**: Fine-tune compilation invalidation triggers.
-  * `markdownReferences` (default: `true`): Re-trigger compilation if referenced source files are modified.
-  * `inspectedFiles` (default: `false`): Re-trigger compilation if files inspected during prior runs are modified.
-  * `compiledFiles` (default: `false`): Re-trigger compilation if compiled output files are modified.
-* **`<eagerlyProvide>`**: Control which files are attached during the compilation cycle.
-  * `previouslyCompiledFiles` (default: `true`): Eagerly attaches previously generated outputs.
-  * `previouslyInspectedFiles` (default: `true`): Eagerly attaches previously read codebase context.
-  * `maxAttachmentSizeBytes` (default: `0`): Global file attachment size limits (0 indicates unlimited).
-* **`<tracking>`**:
-  * `freezeState` (default: `false`): Evaluates existing compilation manifests, but skips writing new manifests to disk.
-* **`<logging>`**: Debugging outputs.
-  * `scriptsEvents` (default: `false`): Logs FreeMarker phase load/unload events.
-  * `eagerlyProvided` (default: `false`): Logs details of files eagerly attached to prompts.
-  * `fileListingAndReading` (default: `false`): Logs model-driven files reads.
-  * `fileMutating` (default: `false`): Logs model-driven writes, patches, and deletions.
-  * `scriptRun` (default: `false`): Logs custom tool script executions.
-  * `selectionReason` (default: `false`): Logs compilation selection reason banners for every processed target.
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `ollama.model` | `String` | unset | Local model identifier (e.g., `codegemma`, `llama3`). |
+| `ollama.endpoint` | `String` | unset | Local Ollama instance URL (e.g., `http://localhost:11434`). |
+| `ollama.apiKey` | `String` | unset | Optional authorization key for secured Ollama proxies. |
+| `ollama.timeoutSeconds` | `int` | `60` | Request timeout limit in seconds. |
+| `ollama.retryAttempts` | `int` | `3` | Retry attempts on connection failures. |
+| `ollama.options` | `Map` | empty | Additional custom option parameters sent to Ollama API. |
+
+---
+
+### 5. Context Settings (`<context>`)
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `cachedContent` | `boolean` | `true` | Enables server-side LLM context caching (`cachedContents`). |
+| `allowScriptedMessageData` | `boolean` | `true` | Permits custom prompt scripts to modify message data payloads. |
+| `allowScriptedAttachments` | `boolean` | `true` | Permits custom prompt scripts to filter or reorder background attachments. |
+| `compiledFiles` | `boolean` | `true` | Controls whether previously compiled files from prior cycles are eagerly provided in context attachments. |
+| `inspectedFiles` | `boolean` | `true` | Controls whether previously inspected files from prior cycles are eagerly provided in context attachments. |
+| `plainAttachmentExtensions` | `List` | empty | Additional custom file extensions attached using plain Markdown formatting instead of Base64. Merged with built-in text/code extensions (`md`, `java`, `py`, `json`, `yaml`, `xml`, `txt`, `css`, `sh`, `rs`, `go`, etc.). |
+| `referencesTree.attachFiles` | `boolean` | `false` | Toggles whether files discovered in reference tree traversal are attached as context payloads. |
+| `referencesTree.depth` | `String` | `"3"` | Reference tree traversal depth. Options: `0` (disabled), `1`, `2`, ..., `*` (unlimited). |
+| `referencesTree.maxDepth` | `int` | `8` | Safety cap for maximum recursion depth when processing reference graphs. |
+| `sources` | `List` | empty | Background context files with target processed file pattern filtering (`pattern`, default `**/*.md`) and multiple reasoning phase pattern filtering (`phase`, default `*`). Configurable in XML (`<source pattern="..." phase="...">`), YAML, JSON, or properties (`context.sources.N.file`, `context.sources.N.pattern`, `context.sources.N.phase`). |
+
+---
+
+### 6. Reasoning Settings (`<reasoning>`)
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | `Boolean` | unset | Explicit toggle to enable or disable reasoning execution cycles. |
+| `maxTurns` | `int` | `10` | Maximum multi-turn reasoning limits for a compilation cycle. |
+| `maxReferenceDepth` | `int` | `8` | Safety cap for maximum recursion depth when processing reference graphs. |
+| `scriptsPath` | `String` | unset | Custom filesystem path for FreeMarker (`.ftl`) prompt scripts. |
+| `thinkingOutLoud` | `boolean` | `false` | Enables incremental planning messages to user during turn evaluation. |
+| `logSystemContext` | `boolean` | `false` | Enables diagnostic logging of rendered system context prompt. |
+| `logParseErrorRecovery` | `boolean` | `false` | Enables diagnostic logging of response parse error recovery attempts. |
+| `enableReasoningLog` | `boolean` | `false` | Enables writing structured execution log files (`.log`). |
+| `turnCountNote` | `boolean` | `true` | Appends turn budget notes to outgoing prompts. |
+| `summarizeCycleTurns` | `int` | `0` | Turn interval for LLM conversation history summarization. Set to `0` to disable summarization (default), `1` to request summarization every turn, or `N` to summarize every `N` turns (`reasoning.summarizeTurnInterval` is supported as a property alias). |
+
+---
+
+### 7. Model Settings (`<model>`)
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `requestResponseLog` | `boolean` | `false` | Toggles writing effective language model requests and raw responses to `model-log/<timestamp>-<name-of-file-being-processed>.log`. |
+
+---
+
+### 8. Tooling Settings (`<tooling>`)
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `tooling.main` | `String` | unset | Granted tool permissions for `main` source base (`list`, `list_compiled`, `read`, `write`, `append`, `prepend`, `move`, `copy`, `patch`, `delete`). |
+| `tooling.test` | `String` | unset | Granted tool permissions for `test` source base (`list`, `list_compiled`, `read`, `write`, `append`, `prepend`, `move`, `copy`, `patch`, `delete`). |
+| `tooling.target` | `String` | unset | Granted tool permissions for `target` output base (`list`, `list_compiled`, `read`, `write`, `append`, `prepend`, `move`, `copy`, `patch`, `delete`). |
+| `tooling.<name>` | `String` | unset | Granted tool permissions for custom named base `<name>`. |
+| `tooling.scriptPath` | `String` | unset | Directory path containing allowed external scripts for `RUN_SCRIPT`. |
+| `tooling.addReasoningNotes` | `boolean` | `false` | Permits adding reasoning notes via `ADD_REASONING_NOTE`. |
+| `tooling.grantFileOwnership` | `boolean` | `true` | Controls whether mutating a file owned by another source automatically grants file ownership to the current source and disowns the previous owner. If set to `false`, mutating files owned by another source is blocked. |
+
+---
+
+### 9. Tracking Settings (`<tracking>`)
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `tracking.freezeState` | `boolean` | `false` | Disables writing and updating source tracking records on disk when set to `true`. |
+| `tracking.cleanupStaleCompiledFiles` | `boolean` | `false` | Controls whether stale compiled files are automatically deleted upon compilation cycle completion (applies to both full batch runs and explicit source compilation runs). |
+
+---
+
+### 10. Logging Settings (`<logging>` & `<log>`)
+
+#### Fine-Grained Diagnostics (`<logging>`)
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `logging.scriptsEvents` | `boolean` | `false` | Logs script engine events and phase transitions. |
+| `logging.eagerlyProvided` | `boolean` | `false` | Logs details of files eagerly provided as context attachments. |
+| `logging.fileListingAndReading` | `boolean` | `false` | Logs tool file reading and directory listing operations. |
+| `logging.fileMutating` | `boolean` | `false` | Logs file writing, patching, appending, and deleting operations. |
+| `logging.scriptRun` | `boolean` | `false` | Logs script execution operations (`RUN_SCRIPT`). |
+| `logging.selectionReason` | `boolean` | `false` | Logs reasons why individual source files were selected or skipped. |
+| `logging.result` | `boolean` | `false` | Logs compilation cycle summary results. |
+| `logging.trackingFile` | `boolean` | `false` | Logs tracking record file reads and writes. |
+| `logging.llmProvider` | `boolean` | `false` | Logs LLM provider initialization and configuration resolution. |
+| `logging.sourceTag` | `boolean` | `false` | Prefixes log messages emitted during a file's reasoning cycle with `[<simple-file-name>]` (e.g. `[Customer.md]`). |
+
+#### Legacy Build Log Flags (`<log>`)
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `log.skipped` | `boolean` | `false` | Logs skipped files during batch compilation scanning. |
+| `log.processingOrder` | `boolean` | `false` | Logs dependency graph processing order. |
+| `log.eagerlyProvided` | `boolean` | `false` | Logs eagerly provided attachment details. |
 
 ---
 
 ## Troubleshooting
 
-### "Invalid plugin configuration: Gemini apiKey is required"
-Reins cannot locate your LLM authorization key. Double-check that `GEMINI_API_KEY` is exported in the shell running Maven or the CLI, or hardcode it in your configuration.
+### "Invalid plugin configuration: source.main is required and must be explicitly configured."
+Reins requires an explicit `source.main` entry. Configure `<source><main>src/main/nl</main></source>` or set property `reins.source.main`.
 
-### "Unrecognized tool operation token 'X' in tooling.Y"
-You specified an invalid permission in your tooling config. Supported operations are restricted to `list`, `list_compiled`, `read`, `write`, `patch`, and `delete`.
-
-### "enableProjectInference is true but project file not found: project.md"
-You activated project-wide inference context processing, but forgot to supply a high-level summary at your project root. Disable `<enableProjectInference>` or create a basic `project.md` file detailing your tech stack.
+### "Source base 'X' is defined but has no corresponding target path defined in target.X"
+Every configured source base requires an output path in target. Add `<target><X>path</X></target>` or set property `reins.target.X=path`.
 
 ### "Explicit source is ambiguous"
-When compiling using explicit sources (e.g., `-Dsource=file.md` or `--source file.md`), the filename matches multiple files inside your scan roots. Provide a relative path prefix (e.g., `-Dsource=domain/file.md`) to resolve ambiguity.
+When compiling using explicit sources (e.g., `-Dsource=file.md` or `--source file.md`), the filename matches multiple files. Provide a base scheme (e.g. `-Dsource=main:file.md`) or sub-path prefix (`-Dsource=domain/file.md`) to resolve ambiguity.
+

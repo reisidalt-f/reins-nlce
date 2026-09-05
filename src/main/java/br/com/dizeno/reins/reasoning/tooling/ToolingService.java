@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * ToolingService is part of the tool execution environments (like MCP tools and local file tools) exposed to LLMs in the reins architecture.
+ * ToolingService is part of the tool execution environments (like tools and local file tools) exposed to LLMs in the reins architecture.
  * Acts as a service component responsible for managing and executing operations related to its prefix.
  */
 public class ToolingService {

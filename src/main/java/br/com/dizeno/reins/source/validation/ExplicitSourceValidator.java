@@ -26,16 +26,50 @@ public class ExplicitSourceValidator {
      * @param source the source
      * @return the string result
      */
+    /**
+     * Validates and splits multiple comma-separated source inputs.
+     *
+     * @param source the comma-separated source string
+     * @return the list of validated source entries
+     */
+    public List<String> validateSourceInputs(String source) {
+        if (source == null || source.trim().isEmpty()) {
+            throw new IllegalArgumentException("System property 'source' must not be empty.");
+        }
+        List<String> list = new java.util.ArrayList<>();
+        for (String raw : source.split(",")) {
+            String trimmed = raw.trim();
+            if (!trimmed.isEmpty()) {
+                validateSourceInput(trimmed);
+                list.add(trimmed);
+            }
+        }
+        if (list.isEmpty()) {
+            throw new IllegalArgumentException("System property 'source' must not be empty.");
+        }
+        return list;
+    }
+
+    /**
+     * Validates the inputs or files source input.
+     *
+     * @param source the source
+     * @return the string result
+     */
     public String validateSourceInput(String source) {
         if (source == null || source.trim().isEmpty()) {
             throw new IllegalArgumentException("System property 'source' must not be empty.");
         }
         String trimmed = source.trim();
-        Path path = Path.of(trimmed);
-        if (path.isAbsolute()) {
+        String pathPart = trimmed;
+        int colonIdx = trimmed.indexOf(':');
+        if (colonIdx > 0 && !trimmed.contains("://")) {
+            pathPart = trimmed.substring(colonIdx + 1);
+        }
+        if (colonIdx == 1 && Character.isLetter(trimmed.charAt(0))) {
             throw new IllegalArgumentException("System property 'source' must be a relative path under configured source bases.");
         }
-        for (String segment : trimmed.replace('\\', '/').split("/")) {
+        for (String segment : pathPart.replace('\\', '/').split("/")) {
             if ("..".equals(segment)) {
                 throw new IllegalArgumentException("System property 'source' must not contain '..' segments.");
             }

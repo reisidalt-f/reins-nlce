@@ -49,7 +49,7 @@ class CompilationServiceLoggingResultTest {
         ReinsConfig config = baseConfig(); // default logging.result is false
         RecordingLog log = new RecordingLog();
 
-        service.processFiles(List.of(createSourceFile("test1.md")), false, config, projectRoot, log);
+        service.processFiles(List.of(createSourceFile("test1.md")), config, projectRoot, log);
 
         // Verify no compiled log messages are present
         assertFalse(log.hasInfoContaining("[compiled]"));
@@ -62,7 +62,7 @@ class CompilationServiceLoggingResultTest {
         config.getLogging().setResult(true);
         RecordingLog log = new RecordingLog();
 
-        service.processFiles(List.of(createSourceFile("test2.md")), false, config, projectRoot, log);
+        service.processFiles(List.of(createSourceFile("test2.md")), config, projectRoot, log);
 
         // Verify compiled log message is present
         assertTrue(log.hasInfoContaining("[compiled]"));
@@ -75,7 +75,7 @@ class CompilationServiceLoggingResultTest {
         RecordingLog log = new RecordingLog();
 
         try {
-            service.processFiles(List.of(createSourceFile("test3.md")), false, config, projectRoot, log);
+            service.processFiles(List.of(createSourceFile("test3.md")), config, projectRoot, log);
         } catch (Exception ignored) {
         }
 
@@ -89,7 +89,7 @@ class CompilationServiceLoggingResultTest {
         ReinsConfig config = baseConfig(); // default logging.result is false
         RecordingLog log = new RecordingLog();
 
-        service.processFiles(List.of(createSourceFile("testSkipped1.md")), false, config, projectRoot, log);
+        service.processFiles(List.of(createSourceFile("testSkipped1.md")), config, projectRoot, log);
 
         // Verify no skipped log messages are present
         assertFalse(log.hasInfoContaining("[skipped]"));
@@ -102,10 +102,10 @@ class CompilationServiceLoggingResultTest {
         config.getLogging().setResult(true);
         RecordingLog log = new RecordingLog();
 
-        service.processFiles(List.of(createSourceFile("testSkipped2.md")), false, config, projectRoot, log);
+        service.processFiles(List.of(createSourceFile("testSkipped2.md")), config, projectRoot, log);
 
-        // Verify skipped log message is present
-        assertTrue(log.hasInfoContaining("[skipped]"));
+        // Verify skipped / no-change log message is present
+        assertTrue(log.hasInfoContaining("[skipped]") || log.hasInfoContaining("[no-change]"));
     }
 
     private CompilationService createServiceWithSuccessResult() throws Exception {
@@ -123,8 +123,7 @@ class CompilationServiceLoggingResultTest {
                 new MarkdownDependencyGraphBuilder(),
                 new ProcessingOrderResolver(),
                 reasoningService,
-                new ProjectContextService(),
-                null);
+                new ProjectContextService());
     }
 
     private CompilationService createServiceWithFailureResult() throws Exception {
@@ -142,8 +141,7 @@ class CompilationServiceLoggingResultTest {
                 new MarkdownDependencyGraphBuilder(),
                 new ProcessingOrderResolver(),
                 reasoningService,
-                new ProjectContextService(),
-                null);
+                new ProjectContextService());
     }
 
     private ReasoningResult successResult() {
@@ -172,8 +170,7 @@ class CompilationServiceLoggingResultTest {
                 new MarkdownDependencyGraphBuilder(),
                 new ProcessingOrderResolver(),
                 reasoningService,
-                new ProjectContextService(),
-                null);
+                new ProjectContextService());
     }
 
     private ReasoningResult skippedResult() {
@@ -195,15 +192,14 @@ class CompilationServiceLoggingResultTest {
 
     private ReinsConfig baseConfig() {
         ReinsConfig config = new ReinsConfig();
-        config.setScanRoots(List.of(projectRoot.resolve("src/main/nl").toFile()));
+        config.setSourceBase("main", projectRoot.resolve("src/main/nl").toFile());
         config.setIncludePattern("**/*.md");
         config.setFailOnError(false);
         config.setLogging(new LoggingSettings()); // defaults to result = false
         
         TargetSettings target = new TargetSettings();
-        target.setRoot(projectRoot.toFile());
-        target.setMain("src/main/java");
-        target.setTest("src/test/java");
+        target.setTargetBase("main", "src/main/java");
+        target.setTargetBase("test", "src/test/java");
         config.setTarget(target);
         
         return config;

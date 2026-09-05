@@ -119,14 +119,14 @@ class ToolingServiceTest {
         when(trackingStore.load(eq(tempDir.toAbsolutePath().normalize()), eq("main:feature.md")))
                 .thenReturn(Optional.of(record));
 
-        br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService = new br.com.dizeno.reins.reasoning.tooling.ToolingService(new FilePatchApplier(), trackingStore);
+        br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService = new br.com.dizeno.reins.reasoning.tooling.ToolingService(new FilePatchApplier(), trackingStore);
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = new br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest();
         request.setOperation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.LIST_COMPILED_FILES);
         request.setBase("main");
         request.setPath("feature.md");
 
-        mcpService.execute(request, resolver);
-        mcpService.execute(request, resolver);
+        toolingService.execute(request, resolver);
+        toolingService.execute(request, resolver);
 
         verify(trackingStore, times(2)).load(eq(tempDir.toAbsolutePath().normalize()), eq("main:feature.md"));
     }
@@ -141,12 +141,12 @@ class ToolingServiceTest {
         request.setBase("main");
         request.setPath("feature.md");
 
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
+        FileToolsSettings settings = new FileToolsSettings();
         settings.setMain("list");
         br.com.dizeno.reins.reasoning.tooling.file.FilePolicy permission = new br.com.dizeno.reins.reasoning.tooling.file.FilePolicy(settings);
 
-        br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService = new br.com.dizeno.reins.reasoning.tooling.ToolingService(new FilePatchApplier(), trackingStore);
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.execute(request, resolver, permission);
+        br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService = new br.com.dizeno.reins.reasoning.tooling.ToolingService(new FilePatchApplier(), trackingStore);
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.execute(request, resolver, permission);
 
         assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.ERROR, result.getStatus());
         assertTrue(result.getFailureReason().contains("requires token: list_compiled"));
@@ -212,16 +212,21 @@ class ToolingServiceTest {
 
         br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
 
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: patch_file\n"
-                + "base: target\n"
-                + "path: main/java/app/Hello.java\n"
-                + "atLine: 2\n"
-                + "content: \"inserted\\n\"\n");
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromText(
+                "--reins-boundary\n"
+                + "PATCH_FILE target main/java/app/Hello.java\n"
+                + "\n"
+                + "@@ -1,3 +1,4 @@\n"
+                + " line1\n"
+                + "+inserted\n"
+                + " line2\n"
+                + " line3\n"
+                + "--reins-boundary--\n");
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver);
 
         assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
+        assertNull(result.getContent(), "patch_file result should not contain file content");
         assertEquals("line1\ninserted\nline2\nline3\n", Files.readString(file));
     }
 
@@ -234,13 +239,18 @@ class ToolingServiceTest {
 
         br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
 
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: patch_file\n"
-                + "base: target\n"
-                + "path: main/java/app/Hello.java\n"
-                + "atLine: 2\n"
-                + "replacing: 2\n"
-                + "content: \"newA\\nnewB\\n\"\n");
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromText(
+                "--reins-boundary\n"
+                + "PATCH_FILE target main/java/app/Hello.java\n"
+                + "\n"
+                + "@@ -1,4 +1,4 @@\n"
+                + " line1\n"
+                + "-oldA\n"
+                + "-oldB\n"
+                + "+newA\n"
+                + "+newB\n"
+                + " line4\n"
+                + "--reins-boundary--\n");
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver);
 
@@ -249,8 +259,7 @@ class ToolingServiceTest {
     }
 
     @Test
-    void patchFileRequestParsingDefaultsReplacingToZero() throws Exception {
-        
+    void patchFileSupportsPatchKeyAlias() throws Exception {
         Path targetRoot = tempDir.resolve("src");
         Path file = targetRoot.resolve("main/java/app/Hello.java");
         Files.createDirectories(file.getParent());
@@ -258,23 +267,21 @@ class ToolingServiceTest {
 
         br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
 
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: patch_file\n"
-                + "base: target\n"
-                + "path: main/java/app/Hello.java\n"
-                + "atLine: 1\n"
-                + "content: \"prefix\\n\"\n");
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromText(
+                "--reins-boundary\n"
+                + "PATCH_FILE target main/java/app/Hello.java\n"
+                + "\n"
+                + "@@ -1,2 +1,3 @@\n"
+                + "+prefix\n"
+                + " a\n"
+                + " b\n"
+                + "--reins-boundary--\n");
 
-        assertNull(request.getReplacing(), "replacing should be null when not specified");
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver);
 
         assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
         assertEquals("prefix\na\nb\n", Files.readString(file));
     }
-
-    
-    
-    
 
     @Test
     void patchFileRejectsDeprecatedModeField() {
@@ -285,15 +292,14 @@ class ToolingServiceTest {
                         + "base: target\n"
                         + "path: some/File.java\n"
                         + "mode: insert\n"
-                        + "atLine: 1\n"
-                        + "content: \"x\"\n"));
+                        + "content: \"@@ -1 +1 @@\\n-x\\n+y\\n\"\n"));
         assertTrue(ex.getMessage().contains("'mode'"), "Error must mention the deprecated field");
         assertTrue(ex.getMessage().contains("no longer supported"), "Error must say it is no longer supported");
     }
 
     @Test
-    void patchFileRejectsDeprecatedCoordinateFields() {
-        for (String field : new String[]{"startLine", "startColumn", "endLine", "endColumn"}) {
+    void patchFileRejectsDeprecatedCoordinateAndLineFields() {
+        for (String field : new String[]{"startLine", "startColumn", "endLine", "endColumn", "atLine", "replacing"}) {
             IllegalArgumentException ex = org.junit.jupiter.api.Assertions.assertThrows(
                     IllegalArgumentException.class,
                     () -> br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
@@ -301,8 +307,7 @@ class ToolingServiceTest {
                             + "base: target\n"
                             + "path: some/File.java\n"
                             + field + ": 1\n"
-                            + "atLine: 1\n"
-                            + "content: \"x\"\n"),
+                            + "content: \"@@ -1 +1 @@\\n-x\\n+y\\n\"\n"),
                     "Expected rejection for deprecated field: " + field);
             assertTrue(ex.getMessage().contains("'" + field + "'"),
                     "Error must mention the deprecated field: " + field);
@@ -310,41 +315,17 @@ class ToolingServiceTest {
     }
 
     @Test
-    void patchFileRejectsAtLineZeroAndNegative() {
-        
-        IllegalArgumentException ex0 = org.junit.jupiter.api.Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                        "operation: patch_file\n"
-                        + "base: target\n"
-                        + "path: some/File.java\n"
-                        + "atLine: 0\n"
-                        + "content: \"x\"\n"));
-        assertTrue(ex0.getMessage().contains("atLine must be >= 1"));
-
-        
-        IllegalArgumentException exNeg = org.junit.jupiter.api.Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                        "operation: patch_file\n"
-                        + "base: target\n"
-                        + "path: some/File.java\n"
-                        + "atLine: 1\n"
-                        + "replacing: -1\n"
-                        + "content: \"x\"\n"));
-        assertTrue(exNeg.getMessage().contains("replacing must be >= 0"));
-    }
-
-    @Test
     void patchFileFailsWhenTargetFileDoesNotExist() throws Exception {
         br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
 
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: patch_file\n"
-                + "base: target\n"
-                + "path: main/java/app/Missing.java\n"
-                + "atLine: 1\n"
-                + "content: \"x\\n\"\n");
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromText(
+                "--reins-boundary\n"
+                + "PATCH_FILE target main/java/app/Missing.java\n"
+                + "\n"
+                + "@@ -1 +1 @@\n"
+                + "-x\n"
+                + "+y\n"
+                + "--reins-boundary--\n");
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver);
 
@@ -360,16 +341,19 @@ class ToolingServiceTest {
         Files.writeString(file, "line1\nline2\n");
 
         br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
+        FileToolsSettings settings = new FileToolsSettings();
         settings.setTarget("read,list");
         br.com.dizeno.reins.reasoning.tooling.file.FilePolicy permission = new br.com.dizeno.reins.reasoning.tooling.file.FilePolicy(settings);
 
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: patch_file\n"
-                + "base: target\n"
-                + "path: main/java/app/Hello.java\n"
-                + "atLine: 2\n"
-                + "content: \"x\\n\"\n");
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromText(
+                "--reins-boundary\n"
+                + "PATCH_FILE target main/java/app/Hello.java\n"
+                + "\n"
+                + "@@ -1,2 +1,2 @@\n"
+                + " line1\n"
+                + "-line2\n"
+                + "+x\n"
+                + "--reins-boundary--\n");
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver, permission);
 
@@ -388,12 +372,15 @@ class ToolingServiceTest {
 
         br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
 
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: patch_file\n"
-                + "base: main\n"
-                + "path: feature.md\n"
-                + "atLine: 1\n"
-                + "content: \"patched\\n\"\n");
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromText(
+                "--reins-boundary\n"
+                + "PATCH_FILE main feature.md\n"
+                + "\n"
+                + "@@ -1,2 +1,2 @@\n"
+                + "-alpha\n"
+                + "+patched\n"
+                + " beta\n"
+                + "--reins-boundary--\n");
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver);
 
@@ -411,103 +398,21 @@ class ToolingServiceTest {
 
         br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
 
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: patch_file\n"
-                + "base: target\n"
-                + "path: main/java/app/Hello.java\n"
-                + "atLine: 3\n"
-                + "content: \"line3\\n\"\n");
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromText(
+                "--reins-boundary\n"
+                + "PATCH_FILE target main/java/app/Hello.java\n"
+                + "\n"
+                + "@@ -1,2 +1,3 @@\n"
+                + " line1\n"
+                + " line2\n"
+                + "+line3\n"
+                + "--reins-boundary--\n");
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver);
 
         assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
         assertEquals("line1\nline2\nline3\n", Files.readString(file));
     }
-
-    @Test
-    void patchFileRejectsAtLineBeyondEndPlusOne() throws Exception {
-        Path targetRoot = tempDir.resolve("src");
-        Path file = targetRoot.resolve("main/java/app/Hello.java");
-        Files.createDirectories(file.getParent());
-        Files.writeString(file, "line1\nline2\n");
-
-        br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
-
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: patch_file\n"
-                + "base: target\n"
-                + "path: main/java/app/Hello.java\n"
-                + "atLine: 4\n"
-                + "content: \"line4\\n\"\n");
-
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver);
-
-        assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.ERROR, result.getStatus());
-        assertNotNull(result.getFailureReason());
-        assertTrue(result.getFailureReason().contains("out of range"));
-        assertEquals("line1\nline2\n", Files.readString(file));
-    }
-
-    @Test
-    void patchFileReplacingBeyondRemainingLinesDeletesToEnd() throws Exception {
-        Path targetRoot = tempDir.resolve("src");
-        Path file = targetRoot.resolve("main/java/app/Hello.java");
-        Files.createDirectories(file.getParent());
-        Files.writeString(file, "line1\nline2\nline3\nline4\n");
-
-        br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
-
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: patch_file\n"
-                + "base: target\n"
-                + "path: main/java/app/Hello.java\n"
-                + "atLine: 3\n"
-                + "replacing: 100\n"
-                + "content: \"tail\\n\"\n");
-
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver);
-
-        assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
-        assertEquals("line1\nline2\ntail\n", Files.readString(file));
-    }
-
-    @Test
-    void patchFileSupportsDeleteOnlyPatchWithEmptyContent() throws Exception {
-        Path targetRoot = tempDir.resolve("src");
-        Path file = targetRoot.resolve("main/java/app/Hello.java");
-        Files.createDirectories(file.getParent());
-        Files.writeString(file, "line1\nline2\nline3\n");
-
-        br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
-
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: patch_file\n"
-                + "base: target\n"
-                + "path: main/java/app/Hello.java\n"
-                + "atLine: 2\n"
-                + "replacing: 1\n"
-                + "content: \"\"\n");
-
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver);
-
-        assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
-        assertEquals("line1\nline3\n", Files.readString(file));
-    }
-
-    @Test
-    void patchFileFromYamlRejectsNonNumericAtLine() {
-        assertThrows(IllegalArgumentException.class,
-                () -> br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                        "operation: patch_file\n"
-                        + "base: target\n"
-                        + "path: main/java/app/Hello.java\n"
-                        + "atLine: abc\n"
-                        + "content: \"x\"\n"));
-    }
-
-    
-    
-    
 
     @Test
     void patchFileInsertsEmptyLine() throws Exception {
@@ -518,40 +423,21 @@ class ToolingServiceTest {
 
         br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
 
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: patch_file\n"
-                + "base: target\n"
-                + "path: main/java/app/Hello.java\n"
-                + "atLine: 2\n"
-                + "content: \"\\n\"\n");
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromText(
+                "--reins-boundary\n"
+                + "PATCH_FILE target main/java/app/Hello.java\n"
+                + "\n"
+                + "@@ -1,3 +1,4 @@\n"
+                + " line1\n"
+                + "+\n"
+                + " line2\n"
+                + " line3\n"
+                + "--reins-boundary--\n");
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver);
 
         assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
         assertEquals("line1\n\nline2\nline3\n", Files.readString(file));
-    }
-
-    @Test
-    void patchFileInsertEmptyContentProducesNoChange() throws Exception {
-        Path targetRoot = tempDir.resolve("src");
-        Path file = targetRoot.resolve("main/java/app/Hello.java");
-        Files.createDirectories(file.getParent());
-        Files.writeString(file, "line1\nline2\n");
-
-        br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
-
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: patch_file\n"
-                + "base: target\n"
-                + "path: main/java/app/Hello.java\n"
-                + "atLine: 1\n"
-                + "replacing: 0\n"
-                + "content: \"\"\n");
-
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver);
-
-        assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
-        assertEquals("line1\nline2\n", Files.readString(file));
     }
 
     @Test
@@ -563,13 +449,17 @@ class ToolingServiceTest {
 
         br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
 
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: patch_file\n"
-                + "base: target\n"
-                + "path: main/java/app/Hello.java\n"
-                + "atLine: 2\n"
-                + "replacing: 3\n"
-                + "content: \"\"\n");
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromText(
+                "--reins-boundary\n"
+                + "PATCH_FILE target main/java/app/Hello.java\n"
+                + "\n"
+                + "@@ -1,5 +1,2 @@\n"
+                + " line1\n"
+                + "-line2\n"
+                + "-line3\n"
+                + "-line4\n"
+                + " line5\n"
+                + "--reins-boundary--\n");
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver);
 
@@ -586,17 +476,54 @@ class ToolingServiceTest {
 
         br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
 
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: patch_file\n"
-                + "base: target\n"
-                + "path: main/java/app/Hello.java\n"
-                + "atLine: 2\n"
-                + "replacing: 3\n"
-                + "content: \"newA\\n\"\n");
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromText(
+                "--reins-boundary\n"
+                + "PATCH_FILE target main/java/app/Hello.java\n"
+                + "\n"
+                + "@@ -1,5 +1,3 @@\n"
+                + " line1\n"
+                + "-oldA\n"
+                + "-oldB\n"
+                + "-oldC\n"
+                + "+newA\n"
+                + " line5\n"
+                + "--reins-boundary--\n");
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver);
 
         assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
         assertEquals("line1\nnewA\nline5\n", Files.readString(file));
+    }
+
+    @Test
+    void patchFileStripsYamlBlockScalarIndentation() throws Exception {
+        // Reproduces the real failure observed when the model writes patch content
+        // inside a YAML block scalar (content: |-), which prepends 2 spaces to every
+        // diff line. The applier must strip that indent before parsing.
+        br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver = createResolver(tempDir);
+        // targetRoot is tempDir/src — file must be inside it to pass scope validation
+        Path file = tempDir.resolve("src/Foo.java");
+        Files.writeString(file, "class Foo {\n    int snake_case = 0;\n}\n");
+
+        // This is exactly how the model encodes patch content in YAML block scalar:
+        // every line is indented by 2 spaces.
+        String yamlIndentedPatch =
+            "  @@ -1,3 +1,3 @@\n" +
+            "   class Foo {\n" +
+            "  -    int snake_case = 0;\n" +
+            "  +    int camelCase = 0;\n" +
+            "   }\n";
+
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest request = new br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest();
+        request.setOperation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.PATCH_FILE);
+        request.setBase("target");
+        request.setPath("Foo.java");
+        request.setContent(yamlIndentedPatch);
+
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(request, resolver);
+
+        assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus(),
+            "patch should succeed even when diff lines carry YAML block scalar indent: " + result.getFailureReason());
+        assertEquals("class Foo {\n    int camelCase = 0;\n}\n", Files.readString(file));
     }
 }

@@ -38,7 +38,7 @@ public class ReasoningRequest {
     private String message;
     private Path projectRoot;
     private BasePathMappingSet baseMappings;
-    private GeminiSettings modelConfigSnapshot;
+    private ModelProviderSetting modelConfigSnapshot;
     private List<AttachedFilePayload> attachments = new ArrayList<>();
     private Consumer<String> userMessageListener;
 
@@ -155,7 +155,7 @@ public class ReasoningRequest {
      *
      * @return the collection of elements
      */
-    public GeminiSettings getModelConfigSnapshot() {
+    public ModelProviderSetting getModelConfigSnapshot() {
         return modelConfigSnapshot;
     }
 
@@ -164,7 +164,7 @@ public class ReasoningRequest {
      *
      * @param modelConfigSnapshot the model config snapshot
      */
-    public void setModelConfigSnapshot(GeminiSettings modelConfigSnapshot) {
+    public void setModelConfigSnapshot(ModelProviderSetting modelConfigSnapshot) {
         this.modelConfigSnapshot = modelConfigSnapshot;
     }
 
@@ -224,25 +224,7 @@ public class ReasoningRequest {
         this.compilationBackgroundPayload = compilationBackgroundPayload;
     }
 
-    private boolean projectInferenceCycle = false;
 
-    /**
-     * Checks if the component is project inference cycle.
-     *
-     * @return true if successful or matching, false otherwise
-     */
-    public boolean isProjectInferenceCycle() {
-        return projectInferenceCycle;
-    }
-
-    /**
-     * Sets the project inference cycle.
-     *
-     * @param projectInferenceCycle the project inference cycle
-     */
-    public void setProjectInferenceCycle(boolean projectInferenceCycle) {
-        this.projectInferenceCycle = projectInferenceCycle;
-    }
 
     private EagerlyProvideResult eagerlyProvide;
     private ReferenceDepthPolicy referenceDepthPolicy;

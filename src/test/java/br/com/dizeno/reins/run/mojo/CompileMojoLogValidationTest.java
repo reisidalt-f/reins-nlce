@@ -67,11 +67,16 @@ class CompileMojoLogValidationTest {
         setField(mojo, "gemini", gemini);
 
         TargetSettings targetSettings = new TargetSettings();
-        targetSettings.setProject(projectDir.toFile());
+        targetSettings.setTargetBase("main", "src/main/java");
         setField(mojo, "target", targetSettings);
 
         setField(mojo, "includePattern", "**/*.md");
-        setField(mojo, "enableProjectInference", false);
+
+        Files.createDirectories(projectDir.resolve("src/main/nl"));
+        java.util.Map<String, File> sourceBases = new java.util.LinkedHashMap<>();
+        sourceBases.put("main", projectDir.resolve("src/main/nl").toFile());
+        setField(mojo, "sources", sourceBases);
+        setField(mojo, "provider", "gemini");
     }
 
     @Test
@@ -154,6 +159,10 @@ class CompileMojoLogValidationTest {
         FakeConfigNode selectionReasonNode = new FakeConfigNode("selectionReason");
         selectionReasonNode.setValue(Boolean.toString(selectionReason));
         logging.addChild(selectionReasonNode);
+
+        FakeConfigNode sourceTagNode = new FakeConfigNode("sourceTag");
+        sourceTagNode.setValue("true");
+        logging.addChild(sourceTagNode);
 
         if (addUnknown) {
             FakeConfigNode unknownNode = new FakeConfigNode("unknownToggle");

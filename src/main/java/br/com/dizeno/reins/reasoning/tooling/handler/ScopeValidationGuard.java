@@ -36,19 +36,38 @@ public class ScopeValidationGuard {
      * @return the string result
      */
     public String validatePermissions(ToolExecutionRequest request, FilePolicy permission) {
-        if (permission != null && request.getBase() != null) {
-            ToolExecutionType operationType = ToolExecutionType.fromOperation(request.getOperation());
-            if (operationType != null) {
-                FilePolicy.Base base = parseBaseFromRequest(request.getBase());
-                if (base != null && !permission.isOperationAllowed(operationType, base)) {
+        if (permission != null) {
+            if (request.getOperation() == ToolExecutionRequest.Operation.ADD_REASONING_NOTE
+                    || request.getOperation() == ToolExecutionRequest.Operation.CLEAR_REASONING_NOTES) {
+                if (!permission.isAddReasoningNotes()) {
                     String operationName = request.getOperation().name().toLowerCase();
-                    String baseName = base.name().toLowerCase();
-                    String reason = "Operation " + operationName + " is not permitted on base " + baseName;
-                    FilePolicy.OperationToken requiredToken = operationType.getRequiredToken();
-                    if (requiredToken != null) {
-                        reason += " (requires token: " + requiredToken.getValue() + ")";
+                    return "Operation " + operationName + " is disabled (tooling.addReasoningNotes is false).";
+                }
+            }
+            if (request.getOperation() == ToolExecutionRequest.Operation.COPY_FILE) {
+                if (request.getBase() != null) {
+                    FilePolicy.Base originBase = parseBaseFromRequest(request.getBase());
+                    if (originBase != null && !permission.isOperationAllowed(ToolExecutionType.READ_FILE, originBase)) {
+                        return "Operation copy_file is not permitted on base " + originBase.name().toLowerCase() + " (requires token: read)";
                     }
-                    return reason;
+                }
+                if (!permission.isOperationAllowed(ToolExecutionType.COPY_FILE, FilePolicy.Base.TARGET)) {
+                    return "Operation copy_file is not permitted on base target (requires token: copy)";
+                }
+            } else if (request.getBase() != null) {
+                ToolExecutionType operationType = ToolExecutionType.fromOperation(request.getOperation());
+                if (operationType != null) {
+                    FilePolicy.Base base = parseBaseFromRequest(request.getBase());
+                    if (base != null && !permission.isOperationAllowed(operationType, base)) {
+                        String operationName = request.getOperation().name().toLowerCase();
+                        String baseName = base.name().toLowerCase();
+                        String reason = "Operation " + operationName + " is not permitted on base " + baseName;
+                        FilePolicy.OperationToken requiredToken = operationType.getRequiredToken();
+                        if (requiredToken != null) {
+                            reason += " (requires token: " + requiredToken.getValue() + ")";
+                        }
+                        return reason;
+                    }
                 }
             }
         }
@@ -68,6 +87,27 @@ public class ScopeValidationGuard {
             return null;
         }
 
+        if (request.getOperation() == ToolExecutionRequest.Operation.COPY_FILE) {
+            Path destCandidate = resolveScopedTargetPath(resolver, request.getDestination(), sourceScope);
+            if (!isWithinAnyTargetBase(destCandidate, resolver.getMappings())) {
+                return TARGET_BASE_REQUIRED_MESSAGE;
+            }
+            BasePathMappingSet mappings = resolver.getMappings();
+            Path targetRoot = mappings.getActiveTargetRoot(sourceScope);
+            if (targetRoot != null && !destCandidate.startsWith(targetRoot)) {
+                String errorMsg;
+                if ("test".equals(sourceScope)) {
+                    errorMsg = "Mutation during test-source processing must target the active target output root.";
+                } else if ("main".equals(sourceScope)) {
+                    errorMsg = "Mutation during main-source processing must target the active target output root.";
+                } else {
+                    errorMsg = "Mutation must be within target base.";
+                }
+                return errorMsg;
+            }
+            return null;
+        }
+
         String normalizedBase = resolver.normalizeBase(request.getBase());
         if (!"target".equals(normalizedBase)) {
             return TARGET_BASE_REQUIRED_MESSAGE;
@@ -80,13 +120,14 @@ public class ScopeValidationGuard {
 
         if ("test".equals(sourceScope) || "main".equals(sourceScope)) {
             Path opposite = resolveOppositeScopedTargetPath(resolver, request.getPath(), sourceScope);
-            if (opposite != null && Files.exists(opposite) && !Files.exists(candidate)
-                    && request.getOperation() != ToolExecutionRequest.Operation.WRITE_FILE) {
+            boolean isWriteLike = request.getOperation() == ToolExecutionRequest.Operation.WRITE_FILE
+                    || request.getOperation() == ToolExecutionRequest.Operation.APPEND_FILE
+                    || request.getOperation() == ToolExecutionRequest.Operation.PREPEND_FILE;
+            if (opposite != null && Files.exists(opposite) && !Files.exists(candidate) && !isWriteLike) {
                 return "Scope violation: mutation targets only the active scope output base.";
             }
         }
 
-        
         BasePathMappingSet mappings = resolver.getMappings();
         Path targetRoot = mappings.getActiveTargetRoot(sourceScope);
         if (targetRoot != null && !candidate.startsWith(targetRoot)) {
@@ -99,6 +140,24 @@ public class ScopeValidationGuard {
                 errorMsg = "Mutation must be within target base.";
             }
             return errorMsg;
+        }
+
+        if (request.getOperation() == ToolExecutionRequest.Operation.MOVE_FILE) {
+            Path destCandidate = resolveScopedTargetPath(resolver, request.getDestination(), sourceScope);
+            if (!isWithinAnyTargetBase(destCandidate, resolver.getMappings())) {
+                return TARGET_BASE_REQUIRED_MESSAGE;
+            }
+            if (targetRoot != null && !destCandidate.startsWith(targetRoot)) {
+                String errorMsg;
+                if ("test".equals(sourceScope)) {
+                    errorMsg = "Mutation during test-source processing must target the active target output root.";
+                } else if ("main".equals(sourceScope)) {
+                    errorMsg = "Mutation during main-source processing must target the active target output root.";
+                } else {
+                    errorMsg = "Mutation must be within target base.";
+                }
+                return errorMsg;
+            }
         }
 
         return null;
@@ -122,9 +181,26 @@ public class ScopeValidationGuard {
             throw new IllegalStateException("Target base is not configured.");
         }
 
-        Path candidate = targetRoot.resolve(relativePath == null ? "" : relativePath).normalize();
+        String normalizedRelative = relativePath == null ? "" : relativePath;
         Path projectRoot = resolver.getProjectRoot().toAbsolutePath().normalize();
-        if (!candidate.startsWith(targetRoot.toAbsolutePath().normalize()) || !candidate.startsWith(projectRoot)) {
+        Path absoluteTargetRoot = targetRoot.toAbsolutePath().normalize();
+
+        // If the agent included the target-root prefix inside the relative path, strip it.
+        // Example: targetRoot = "src/main/nl", relativePath = "src/main/nl/br/com/..."
+        // → strip to "br/com/..." so the final path is not duplicated.
+        if (!absoluteTargetRoot.equals(projectRoot)) {
+            String targetRootRelative = projectRoot.relativize(absoluteTargetRoot)
+                    .toString().replace('\\', '/');
+            String relFwd = normalizedRelative.replace('\\', '/');
+            if (relFwd.startsWith(targetRootRelative + "/")) {
+                normalizedRelative = relFwd.substring(targetRootRelative.length() + 1);
+            } else if (relFwd.equals(targetRootRelative)) {
+                normalizedRelative = "";
+            }
+        }
+
+        Path candidate = absoluteTargetRoot.resolve(normalizedRelative).normalize();
+        if (!candidate.startsWith(absoluteTargetRoot) || !candidate.startsWith(projectRoot)) {
             throw new IllegalArgumentException("Path traversal not allowed");
         }
         return candidate;
@@ -187,7 +263,11 @@ public class ScopeValidationGuard {
     public boolean isMutationOperation(ToolExecutionRequest.Operation operation) {
         return operation == ToolExecutionRequest.Operation.WRITE_FILE
                 || operation == ToolExecutionRequest.Operation.PATCH_FILE
-                || operation == ToolExecutionRequest.Operation.DELETE_FILE;
+                || operation == ToolExecutionRequest.Operation.DELETE_FILE
+                || operation == ToolExecutionRequest.Operation.APPEND_FILE
+                || operation == ToolExecutionRequest.Operation.PREPEND_FILE
+                || operation == ToolExecutionRequest.Operation.MOVE_FILE
+                || operation == ToolExecutionRequest.Operation.COPY_FILE;
     }
 
     public FilePolicy.Base parseBaseFromRequest(String baseString) {

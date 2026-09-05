@@ -27,5 +27,20 @@ public record GeminiRequestParams(
         int retryAttempts,
         int emptyResponseRetryDelayMs,
         boolean verbose,
-        GenerationSettings generation
-) {}
+        GenerationSettings generation,
+        ContextSettings contextSettings
+) {
+    public GeminiRequestParams(
+            String endpoint,
+            String apiKey,
+            String model,
+            int timeoutSeconds,
+            int retryAttempts,
+            int emptyResponseRetryDelayMs,
+            boolean verbose,
+            GenerationSettings generation
+    ) {
+        this(endpoint, apiKey, model, timeoutSeconds, retryAttempts, emptyResponseRetryDelayMs, verbose, generation, null);
+    }
+}
+

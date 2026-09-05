@@ -92,24 +92,26 @@ public class CompiledFileRegistryHandler implements ToolOperationHandler {
         Path resolvedSource = resolver.resolve(request.getBase(), request.getPath());
         String canonicalSource = trackingStore.canonicalizePath(resolver.toProjectRelativePath(resolvedSource));
 
-        CompiledFileListing listing = fetchCompiledFileListing(resolver, canonicalSource);
+        Path projectRoot = resolver.getProjectRoot().toAbsolutePath().normalize();
+        Optional<SourceTrackingRecord> recordOpt = trackingStore.load(projectRoot, canonicalSource);
         ToolExecutionResult result = ToolExecutionResult.success(request.getOperation(), qualifiedPath, "listed-compiled-files");
 
-        if (listing == null) {
+        if (recordOpt.isEmpty()) {
             result.setListedPaths(new ArrayList<>());
             return result;
         }
 
+        SourceTrackingRecord record = recordOpt.get();
+        Path allowedBase = resolver.resolveActiveOutputBaseRoot("target");
+        CompiledFileListing listing = buildCompiledFileListing(record, projectRoot, allowedBase);
+
         List<String> qualifiedPaths = new ArrayList<>();
         for (String compiledPath : listing.getExistingPaths()) {
-            Path compiledAbsolute;
-            if (TrackedPathResolver.looksCanonical(compiledPath)) {
-                FileReference reference = FileReference.fromCanonical(compiledPath);
-                compiledAbsolute = resolver.resolve(reference.getBase().value(), reference.getPath());
-            } else {
-                Path candidate = Path.of(compiledPath);
-                compiledAbsolute = candidate.isAbsolute() ? candidate : resolver.resolveProjectPath(compiledPath);
-            }
+            Path compiledAbsolute = TrackedPathResolver.resolveTrackedPath(
+                    projectRoot,
+                    compiledPath,
+                    record.getResolvedTargetRoot()
+            );
             qualifiedPaths.add(resolver.qualifyAbsolute(compiledAbsolute));
         }
         qualifiedPaths.sort(String::compareTo);
@@ -122,21 +124,6 @@ public class CompiledFileRegistryHandler implements ToolOperationHandler {
             result.setExclusionReason("Excluded compiled paths outside active output base scope.");
         }
         return result;
-    }
-
-    private CompiledFileListing fetchCompiledFileListing(BasePathResolver resolver, String canonicalSource) {
-        try {
-            Path projectRoot = resolver.getProjectRoot().toAbsolutePath().normalize();
-            Optional<SourceTrackingRecord> recordOpt = trackingStore.load(projectRoot, canonicalSource);
-            if (recordOpt.isEmpty()) {
-                return null;
-            }
-            SourceTrackingRecord record = recordOpt.get();
-            Path allowedBase = resolver.resolveActiveOutputBaseRoot("target");
-            return buildCompiledFileListing(record, projectRoot, allowedBase);
-        } catch (Exception ex) {
-            return null;
-        }
     }
 
     private CompiledFileListing buildCompiledFileListing(SourceTrackingRecord record, Path projectRoot, Path allowedBase) {

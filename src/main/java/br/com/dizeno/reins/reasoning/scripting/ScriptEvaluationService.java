@@ -431,7 +431,7 @@ public class ScriptEvaluationService {
     }
 
     /**
-     * Render Pipeline Gemini Message.
+     * Render Pipeline Message To Model.
      *
      * @param currentPhase the current phase
      * @param pipelinePlan the pipeline plan
@@ -455,7 +455,7 @@ public class ScriptEvaluationService {
      * @param currentToolResult the current tool result
      * @return the string result
      */
-    public String renderPipelineGeminiMessage(String currentPhase,
+    public String renderPipelineMessageToModel(String currentPhase,
                                               ReasoningPipelinePlan pipelinePlan,
                                               int pipelinePhaseIndex,
                                               String messageContext,
@@ -475,7 +475,7 @@ public class ScriptEvaluationService {
                                               String lastFailureClass,
                                               boolean currentToolResultAvailable,
                                               ToolExecutionResult currentToolResult) {
-        return pipelineOrchestratorService.renderPipelineGeminiMessage(
+        return pipelineOrchestratorService.renderPipelineMessageToModel(
                 currentPhase, pipelinePlan, pipelinePhaseIndex, messageContext, request, config, cycle, policy,
                 scriptRunnerEnabled, referenceTree, inspectedPaths, compiledPaths, attachments, conversationHistory,
                 lastDirectiveIntent, lastDirectiveContentType, lastDirectiveBody, lastFailureClass,

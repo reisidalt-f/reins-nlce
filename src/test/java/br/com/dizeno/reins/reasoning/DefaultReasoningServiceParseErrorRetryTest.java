@@ -40,8 +40,8 @@ class DefaultReasoningServiceParseErrorRetryTest {
     private InferenceService inferenceService;
     private ResponseDirectiveParser directiveParser;
     private ReasoningPromptBuilder promptBuilder;
-    private br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService;
-    private ToolResultFormatter mcpResultFormatter;
+    private br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService;
+    private ToolResultFormatter toolResultFormatter;
     private DefaultReasoningService service;
 
     @TempDir
@@ -52,15 +52,15 @@ class DefaultReasoningServiceParseErrorRetryTest {
         inferenceService = mock(InferenceService.class);
         directiveParser = mock(ResponseDirectiveParser.class);
         promptBuilder = mock(ReasoningPromptBuilder.class);
-        mcpService = mock(br.com.dizeno.reins.reasoning.tooling.ToolingService.class);
-        mcpResultFormatter = mock(ToolResultFormatter.class);
+        toolingService = mock(br.com.dizeno.reins.reasoning.tooling.ToolingService.class);
+        toolResultFormatter = mock(ToolResultFormatter.class);
 
         service = new DefaultReasoningService(
                 inferenceService,
                 directiveParser,
                 promptBuilder,
-                mcpService,
-                mcpResultFormatter,
+                toolingService,
+                toolResultFormatter,
                 new FileReasoningLogService(),
                 new CompilationTrackingStore()
         );
@@ -82,6 +82,7 @@ class DefaultReasoningServiceParseErrorRetryTest {
 
     private ReinsConfig configWithMaxTurns(int maxTurns) {
         ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
         ReasoningSettings settings = new ReasoningSettings();
         settings.setEnabled(true);
         settings.setMaxTurns(maxTurns);

@@ -77,7 +77,7 @@ class CompilationServiceWorkSetExecutionTest {
         Path parentSource = writeMarkdown("src/main/nl/domain/app.md", "# app\n\nUses [node.md]");
 
         MarkdownDependencyGraph graph = graphFor(childSource, parentSource);
-        when(graphBuilder.build(any(), any(), any())).thenReturn(graph);
+        when(graphBuilder.build(any(), any(), any(), any())).thenReturn(graph);
         when(processingOrderResolver.resolve(graph))
                 .thenReturn(List.of("src/main/nl/domain/node.md", "src/main/nl/domain/app.md"));
         when(trackingStore.canonicalizePath(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -102,7 +102,6 @@ class CompilationServiceWorkSetExecutionTest {
                 List.of(
                         new CycleWorkSetEntry(childSource.toFile(), "src/main/nl/domain/node.md", SourceProcessingStatus.COMPILE),
                         new CycleWorkSetEntry(parentSource.toFile(), "src/main/nl/domain/app.md", SourceProcessingStatus.SKIP)),
-                true,
                 List.of());
 
         CompilationSummary summary = service.processFiles(preFilterResult, config, tempDir, mock(Log.class));
@@ -145,7 +144,7 @@ class CompilationServiceWorkSetExecutionTest {
 
         Path source = writeMarkdown("src/main/nl/domain/validate.md", "# validate");
         MarkdownDependencyGraph graph = graphForSingle(source);
-        when(graphBuilder.build(any(), any(), any())).thenReturn(graph);
+        when(graphBuilder.build(any(), any(), any(), any())).thenReturn(graph);
         when(processingOrderResolver.resolve(graph))
                 .thenReturn(List.of("src/main/nl/domain/validate.md"));
         when(trackingStore.canonicalizePath(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -162,7 +161,6 @@ class CompilationServiceWorkSetExecutionTest {
         PreFilterResult preFilterResult = new PreFilterResult(
                 List.of(source.toFile()),
                 List.of(new CycleWorkSetEntry(source.toFile(), "src/main/nl/domain/validate.md", SourceProcessingStatus.VALIDATE)),
-                false,
                 List.of(),
                 1);
 
@@ -203,7 +201,7 @@ class CompilationServiceWorkSetExecutionTest {
         Path parentSource = writeMarkdown("src/main/nl/domain/app.md", "# app\n\nUses [node.md]");
 
         MarkdownDependencyGraph graph = graphFor(childSource, parentSource);
-        when(graphBuilder.build(any(), any(), any())).thenReturn(graph);
+        when(graphBuilder.build(any(), any(), any(), any())).thenReturn(graph);
         when(processingOrderResolver.resolve(graph))
                 .thenReturn(List.of("src/main/nl/domain/node.md", "src/main/nl/domain/app.md"));
         when(trackingStore.canonicalizePath(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -226,7 +224,6 @@ class CompilationServiceWorkSetExecutionTest {
                 List.of(
                         new CycleWorkSetEntry(childSource.toFile(), "src/main/nl/domain/node.md", SourceProcessingStatus.COMPILE),
                         new CycleWorkSetEntry(parentSource.toFile(), "src/main/nl/domain/app.md", SourceProcessingStatus.COMPILE)),
-                false,
                 List.of());
 
         CompilationSummary summary = service.processFiles(preFilterResult, config, tempDir, mock(Log.class));
@@ -268,7 +265,7 @@ class CompilationServiceWorkSetExecutionTest {
         Path parentSource = writeMarkdown("src/main/nl/domain/app.md", "# app\n\nUses [node.md]");
 
         MarkdownDependencyGraph graph = graphFor(childSource, parentSource);
-        when(graphBuilder.build(any(), any(), any())).thenReturn(graph);
+        when(graphBuilder.build(any(), any(), any(), any())).thenReturn(graph);
         when(processingOrderResolver.resolve(graph))
                 .thenReturn(List.of("src/main/nl/domain/node.md", "src/main/nl/domain/app.md"));
         when(trackingStore.canonicalizePath(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -291,7 +288,6 @@ class CompilationServiceWorkSetExecutionTest {
                 List.of(
                         new CycleWorkSetEntry(parentSource.toFile(), "src/main/nl/domain/app.md", SourceProcessingStatus.COMPILE),
                         new CycleWorkSetEntry(childSource.toFile(), "src/main/nl/domain/node.md", SourceProcessingStatus.COMPILE)),
-                true,
                 List.of());
 
         service.processFiles(preFilterResult, config, tempDir, mock(Log.class));
@@ -310,11 +306,10 @@ class CompilationServiceWorkSetExecutionTest {
         gemini.setModel("gemini-2.0-flash");
         config.setGemini(gemini);
 
+        config.setSourceBase("main", tempDir.resolve("src/main/nl").toFile());
         TargetSettings target = new TargetSettings();
-        target.setProject(tempDir.toFile());
-        target.setRoot(tempDir.toFile());
-        target.setMain("src/main/java");
-        target.setTest("src/test/java");
+        target.setTargetBase("main", "src/main/java");
+        target.setTargetBase("test", "src/test/java");
         config.setTarget(target);
 
         ReasoningSettings reasoning = new ReasoningSettings();

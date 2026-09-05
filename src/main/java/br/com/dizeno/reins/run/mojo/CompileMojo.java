@@ -31,6 +31,9 @@ import br.com.dizeno.reins.source.scanner.SourceDiscoveryMode;
 import br.com.dizeno.reins.security.PathValidator;
 import br.com.dizeno.reins.util.LogSanitizer;
 import br.com.dizeno.reins.util.PathNormalizer;
+import java.io.File;
+import java.util.List;
+import java.util.Map;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.model.Plugin;
@@ -66,7 +69,8 @@ public class CompileMojo extends AbstractMojo {
             "selectionReason",
             "result",
             "trackingFile",
-            "llmProvider");
+            "llmProvider",
+            "sourceTag");
 
     @Parameter
     private GeminiSettings gemini;
@@ -74,10 +78,11 @@ public class CompileMojo extends AbstractMojo {
     @Parameter
     private OllamaSettings ollama;
 
-    @Parameter(defaultValue = "gemini")
-    private String provider;
     @Parameter
-    private List<File> scanRoots;
+    private OpenAiSettings openai;
+
+    @Parameter
+    private String provider;
 
     @Parameter(defaultValue = "**/*.md")
     private String includePattern;
@@ -85,14 +90,17 @@ public class CompileMojo extends AbstractMojo {
     @Parameter
     private TargetSettings target;
 
-    @Parameter(defaultValue = "${project.basedir}/src/main/nl")
-    private File mainNlRoot;
-
-    @Parameter(defaultValue = "${project.basedir}/src/test/nl")
-    private File testNlRoot;
+    @Parameter
+    private Map<String, File> sources;
 
     @Parameter(property = "source")
     private String source;
+
+    @Parameter(property = "note")
+    private String note;
+
+    @Parameter(property = "skipTest", defaultValue = "false")
+    private boolean skipTest;
 
     @Parameter
     private ReasoningSettings reasoning;
@@ -105,6 +113,12 @@ public class CompileMojo extends AbstractMojo {
 
     @Parameter
     private LoggingSettings logging;
+
+    @Parameter
+    private ModelSettings model;
+
+    @Parameter
+    private BuildSettings build;
 
 
 
@@ -120,14 +134,14 @@ public class CompileMojo extends AbstractMojo {
     @Parameter(property = "validateAll", defaultValue = "false")
     private boolean validateAll;
 
-    @Parameter(defaultValue = "${project.basedir}/project.md")
-    private File projectContextFile;
+    @Parameter(property = "compilationThreads", defaultValue = "1")
+    private int compilationThreads = 1;
+
+    @Parameter(property = "freshCompilation", defaultValue = "false")
+    private boolean freshCompilation;
 
     @Parameter(property = "skipReins")
     private String skipReins;
-
-    @Parameter(property = "reins.enableProjectInference", defaultValue = "false")
-    private boolean enableProjectInference;
 
     @Parameter
     private ContextSettings context;
@@ -136,7 +150,7 @@ public class CompileMojo extends AbstractMojo {
     private ToolingSettings tooling;
 
     @Parameter
-    private McpFileBaseOpsSettings mcp;
+    private FileToolsSettings fileTools;
 
     @Parameter
     private TrackingSettings tracking;
@@ -216,33 +230,38 @@ public class CompileMojo extends AbstractMojo {
         ReinsConfig config = new ReinsConfig();
         config.setGemini(gemini == null ? new GeminiSettings() : gemini);
         config.setOllama(ollama == null ? new OllamaSettings() : ollama);
-        config.setProvider(provider == null ? "gemini" : provider);
-        config.setDefaultScanRoots(scanRoots == null || scanRoots.isEmpty());
-        config.setScanRoots(defaultScanRoots());
+        config.setOpenai(openai == null ? new OpenAiSettings() : openai);
+        config.setProvider(provider);
         config.setIncludePattern(
                 includePattern == null ? ProjectDirectoryPaths.DEFAULT_INCLUDE_PATTERN : includePattern);
 
         config.setTarget(target == null ? new TargetSettings() : target);
-        config.setMainNlRoot(mainNlRoot);
-        config.setTestNlRoot(testNlRoot);
+        config.setSkipTest(skipTest);
         config.setReasoning(reasoning == null ? new ReasoningSettings() : reasoning);
         if (recompileOn != null) {
             config.setRecompileOn(recompileOn);
         }
         config.setEagerlyProvide(eagerlyProvide == null ? new EagerlyProvideSettings() : eagerlyProvide);
         config.setLogging(logging == null ? new LoggingSettings() : logging);
+        config.setModel(model == null ? new ModelSettings() : model);
+        config.setBuild(build == null ? new BuildSettings() : build);
         config.setFailOnError(failOnError);
         config.setVerbose(verbose);
         config.setDryRun(dryRun);
         config.setValidateAll(validateAll);
-        config.setProjectContextFile(projectContextFile);
-        config.setEnableProjectInference(enableProjectInference);
+        int effectiveThreads = (build != null && build.getCompilationThreads() > 1) ? build.getCompilationThreads() : (compilationThreads > 0 ? compilationThreads : 1);
+        config.setCompilationThreads(effectiveThreads);
+        config.setFreshCompilation(freshCompilation);
         config.setContext(context == null ? new ContextSettings() : context);
         config.setTooling(tooling == null ? new ToolingSettings() : tooling);
 
-        config.setMcp(mcp == null ? new McpFileBaseOpsSettings() : mcp);
+        config.setFileTools(fileTools == null ? new FileToolsSettings() : fileTools);
         config.setTracking(tracking == null ? new TrackingSettings() : tracking);
+        if (sources != null) {
+            sources.forEach(config::setSourceBase);
+        }
         config.setSource(source);
+        config.setNote(note);
         config.setExplicitSourceMode(source != null && !source.trim().isEmpty());
         return config;
     }
@@ -412,15 +431,7 @@ public class CompileMojo extends AbstractMojo {
         }
     }
 
-    private List<File> defaultScanRoots() {
-        if (scanRoots != null && !scanRoots.isEmpty()) {
-            return scanRoots;
-        }
-        List<File> defaults = new ArrayList<>();
-        defaults.add(new File(project.getBasedir(), ProjectDirectoryPaths.MAIN_NL_ROOT));
-        defaults.add(new File(project.getBasedir(), ProjectDirectoryPaths.TEST_NL_ROOT));
-        return defaults;
-    }
+
 
     private String formatDisplayPath(Path absolutePath, Path mainBase, Path testBase) {
         Path normalized = absolutePath.toAbsolutePath().normalize();

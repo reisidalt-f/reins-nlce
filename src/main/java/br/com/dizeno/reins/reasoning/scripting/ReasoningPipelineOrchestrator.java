@@ -159,7 +159,7 @@ public class ReasoningPipelineOrchestrator {
     }
 
     /**
-     * Render Pipeline Gemini Message.
+     * Render Pipeline Message To Model.
      *
      * @param currentPhase the current phase
      * @param pipelinePlan the pipeline plan
@@ -183,7 +183,7 @@ public class ReasoningPipelineOrchestrator {
      * @param currentToolResult the current tool result
      * @return the string result
      */
-    public String renderPipelineGeminiMessage(String currentPhase,
+    public String renderPipelineMessageToModel(String currentPhase,
                                               ReasoningPipelinePlan pipelinePlan,
                                               int pipelinePhaseIndex,
                                               String messageContext,
@@ -203,7 +203,7 @@ public class ReasoningPipelineOrchestrator {
                                               String lastFailureClass,
                                               boolean currentToolResultAvailable,
                                               ToolExecutionResult currentToolResult) {
-        return scriptEvaluationService.renderPipelineGeminiMessage(
+        return scriptEvaluationService.renderPipelineMessageToModel(
                 currentPhase,
                 pipelinePlan,
                 pipelinePhaseIndex,

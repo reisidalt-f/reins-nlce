@@ -28,7 +28,7 @@ public class CollisionDetectionDebugTest {
     private FileComposedViewFixture fixture;
     private br.com.dizeno.reins.reasoning.tooling.file.BasePathMappingSet mappings;
     private br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver;
-    private br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService;
+    private br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService;
 
     @BeforeEach
     void setUp() {
@@ -40,7 +40,7 @@ public class CollisionDetectionDebugTest {
         mappings.setTargetRoot(fixture.getBasePath("main-target"));
 
         resolver = new br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver(mappings, new br.com.dizeno.reins.security.PathValidator(tempDir));
-        mcpService = new br.com.dizeno.reins.reasoning.tooling.ToolingService();
+        toolingService = new br.com.dizeno.reins.reasoning.tooling.ToolingService();
     }
 
     @Test
@@ -66,7 +66,7 @@ public class CollisionDetectionDebugTest {
         request.setPath("helpers.java");
 
         System.out.println("\nCalling executeWithScope with sourceScope='test'");
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "test");
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "test");
 
         System.out.println("Result status: " + result.getStatus());
         System.out.println("Result failure reason: " + result.getFailureReason());

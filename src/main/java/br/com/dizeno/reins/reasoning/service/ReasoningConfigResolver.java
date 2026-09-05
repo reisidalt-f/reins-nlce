@@ -20,7 +20,7 @@ import java.nio.file.Path;
 
 /**
  * ReasoningConfigResolver is part of the extracted reasoning helper services
- * for scripts, attachments, MCP tools, configuration, and state in the reins
+ * for scripts, attachments, tools, configuration, and state in the reins
  * architecture.
  * Acts as a helper utility for resolving its prefix elements.
  */
@@ -33,10 +33,9 @@ public class ReasoningConfigResolver {
      * @return the numeric value
      */
     public int resolveMaxTurns(ReinsConfig config) {
-        String provider = config == null ? null : config.getProvider();
-        boolean isGemini = provider == null || "gemini".equalsIgnoreCase(provider.trim());
-        if (isGemini && config != null && config.getGemini() != null && config.getGemini().getMaximumTurns() != null) {
-            return config.getGemini().resolveMaximumTurns();
+        ModelProviderSetting providerSettings = config == null ? null : config.resolveActiveModelSettings();
+        if (providerSettings != null && providerSettings.getMaximumTurns() != null) {
+            return providerSettings.resolveMaximumTurns();
         }
         ReasoningSettings settings = config == null ? null : config.getReasoning();
         if (settings == null || settings.getMaxTurns() <= 0) {
@@ -54,8 +53,9 @@ public class ReasoningConfigResolver {
      */
     public boolean isNonFulfillmentAttemptBudgetExceeded(ReinsConfig config, int nextAttemptIndex) {
         int configuredRetries = 0;
-        if (config != null && config.getGemini() != null) {
-            configuredRetries = Math.max(0, config.getGemini().getRetryAttempts());
+        ModelProviderSetting providerSettings = config == null ? null : config.resolveActiveModelSettings();
+        if (providerSettings != null) {
+            configuredRetries = Math.max(0, providerSettings.getRetryAttempts());
         }
         int maxAttemptsPerTurn = configuredRetries + 1;
         return nextAttemptIndex > maxAttemptsPerTurn;
@@ -122,10 +122,7 @@ public class ReasoningConfigResolver {
         if (sourceScope == null || sourceScope.isBlank()) {
             return "main";
         }
-        if ("test".equals(sourceScope)) {
-            return "test";
-        }
-        return "main";
+        return sourceScope.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     /**
@@ -192,13 +189,10 @@ public class ReasoningConfigResolver {
         }
         String scope = request == null ? null : request.getSourceScope();
         String sourcePath = request == null ? "" : request.getSourcePath();
-        String base = "test".equalsIgnoreCase(scope) ? "test" : "main";
+        String base = (scope != null && !scope.isBlank()) ? scope.trim().toLowerCase(java.util.Locale.ROOT) : "main";
         String relativePath = sourcePath == null ? "" : sourcePath;
-
-        if ("main".equals(base) && relativePath.startsWith("src/main/nl/")) {
-            relativePath = relativePath.substring("src/main/nl/".length());
-        } else if ("test".equals(base) && relativePath.startsWith("src/test/nl/")) {
-            relativePath = relativePath.substring("src/test/nl/".length());
+        if (relativePath.contains(":")) {
+            return relativePath;
         }
         while (relativePath.startsWith("/")) {
             relativePath = relativePath.substring(1);

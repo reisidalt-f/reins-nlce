@@ -124,13 +124,19 @@ class ReferenceTreeContextServiceScanRootFilterTest {
         request.setProjectRoot(projectDir);
         request.setSourceScope("main");
         request.setSourcePath(projectDir.relativize(projectFile).toString().replace('\\', '/'));
-        request.setBaseMappings(BasePathMappingSet.forProjectInference(projectDir, projectDir.resolve("target")));
+        BasePathMappingSet mappings = new BasePathMappingSet();
+        mappings.setMainRoot(projectDir.toAbsolutePath().normalize());
+        mappings.setTargetRoot(projectDir.resolve("target").toAbsolutePath().normalize());
+        request.setBaseMappings(mappings);
         return request;
     }
 
     private br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolverForProjectInference() {
+        BasePathMappingSet mappings = new BasePathMappingSet();
+        mappings.setMainRoot(projectDir.toAbsolutePath().normalize());
+        mappings.setTargetRoot(projectDir.resolve("target").toAbsolutePath().normalize());
         return new br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver(
-                BasePathMappingSet.forProjectInference(projectDir, projectDir.resolve("target")),
+                mappings,
                 new PathValidator(projectDir)
         );
     }

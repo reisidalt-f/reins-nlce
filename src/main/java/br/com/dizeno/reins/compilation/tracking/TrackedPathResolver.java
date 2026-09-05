@@ -75,7 +75,13 @@ public final class TrackedPathResolver {
         }
         if (looksCanonical(normalized)) {
             FileReference reference = FileReference.fromCanonical(normalized);
-            return reference.toAbsolutePath(base -> resolveBaseRoot(projectRoot, base, resolvedTargetRoot));
+            if (reference.getBase() == FileReferenceBase.TARGET && resolvedTargetRoot != null && !resolvedTargetRoot.isBlank()) {
+                String targetRel = normalizeLoose(resolvedTargetRoot);
+                if (reference.getPath().startsWith(targetRel + "/")) {
+                    reference = new FileReference(FileReferenceBase.TARGET, reference.getPath().substring(targetRel.length() + 1));
+                }
+            }
+            return reference.toAbsolutePathByBaseName(base -> resolveBaseRoot(projectRoot, base, resolvedTargetRoot));
         }
         Path candidate = Path.of(normalized);
         return candidate.isAbsolute() ? candidate.normalize() : projectRoot.resolve(candidate).normalize();
@@ -144,19 +150,20 @@ public final class TrackedPathResolver {
     }
 
     private static Path resolveBaseRoot(Path projectRoot,
-                                        FileReferenceBase base,
+                                        String base,
                                         String resolvedTargetRoot) {
-        return switch (base) {
-            case MAIN -> projectRoot.resolve(ProjectDirectoryPaths.MAIN_NL_ROOT).normalize();
-            case TEST -> projectRoot.resolve(ProjectDirectoryPaths.TEST_NL_ROOT).normalize();
-            case TARGET -> {
-                if (resolvedTargetRoot == null || resolvedTargetRoot.isBlank()) {
-                    yield projectRoot.toAbsolutePath().normalize();
-                }
-                yield projectRoot.resolve(resolvedTargetRoot).normalize();
+        if ("main".equals(base)) return projectRoot.resolve(ProjectDirectoryPaths.MAIN_NL_ROOT).normalize();
+        if ("test".equals(base)) return projectRoot.resolve(ProjectDirectoryPaths.TEST_NL_ROOT).normalize();
+        if ("target".equals(base)) {
+            if (resolvedTargetRoot == null || resolvedTargetRoot.isBlank()) {
+                return projectRoot.toAbsolutePath().normalize();
             }
-            case SCRIPT -> throw new IllegalArgumentException("Script base is not supported for compilation tracking paths.");
-        };
+            return projectRoot.resolve(resolvedTargetRoot).normalize();
+        }
+        if ("script".equals(base)) {
+            throw new IllegalArgumentException("Script base is not supported for compilation tracking paths.");
+        }
+        return projectRoot.resolve(base).normalize();
     }
 
     private static boolean isKnownBase(String value) {

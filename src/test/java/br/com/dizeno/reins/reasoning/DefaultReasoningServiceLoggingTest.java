@@ -24,9 +24,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import br.com.dizeno.reins.compilation.context.CompilationBackgroundFile;
+import br.com.dizeno.reins.compilation.context.CompilationBackgroundPayload;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -40,8 +43,8 @@ public class DefaultReasoningServiceLoggingTest {
     private InferenceService inferenceService;
     private ResponseDirectiveParser directiveParser;
     private ReasoningPromptBuilder promptBuilder;
-    private br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService;
-    private ToolResultFormatter mcpResultFormatter;
+    private br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService;
+    private ToolResultFormatter toolResultFormatter;
     private ReasoningLogService logService;
 
     @TempDir
@@ -60,22 +63,23 @@ public class DefaultReasoningServiceLoggingTest {
         inferenceService = mock(InferenceService.class);
         directiveParser = mock(ResponseDirectiveParser.class);
         promptBuilder = mock(ReasoningPromptBuilder.class);
-        mcpService = mock(br.com.dizeno.reins.reasoning.tooling.ToolingService.class);
-        mcpResultFormatter = mock(ToolResultFormatter.class);
+        toolingService = mock(br.com.dizeno.reins.reasoning.tooling.ToolingService.class);
+        toolResultFormatter = mock(ToolResultFormatter.class);
         logService = new FileReasoningLogService();
 
         reasoningService = new DefaultReasoningService(
                 inferenceService,
                 directiveParser,
                 promptBuilder,
-                mcpService,
-                mcpResultFormatter,
+                toolingService,
+                toolResultFormatter,
                 logService
         );
     }
 
     private ReinsConfig loggingEnabledConfig() {
         ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
         config.getReasoning().setEnableReasoningLog(true);
         return config;
     }
@@ -101,7 +105,9 @@ public class DefaultReasoningServiceLoggingTest {
         request.setProjectRoot(tempDir);
         request.setBaseMappings(createBaseMappings());
 
-        reasoningService.runCycle(request, new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        reasoningService.runCycle(request, config);
 
         assertFalse(Files.exists(tempDir.resolve("reasoning-logs")));
     }
@@ -221,8 +227,8 @@ public class DefaultReasoningServiceLoggingTest {
                 inferenceService,
                 directiveParser,
                 promptBuilder,
-                mcpService,
-                mcpResultFormatter,
+                toolingService,
+                toolResultFormatter,
                 failingLogService
         );
 
@@ -349,6 +355,10 @@ public class DefaultReasoningServiceLoggingTest {
         request.setSourceScope("main");
         request.setSourcePath("src/main/nl/domain/entities.md");
 
+        CompilationBackgroundFile bgFile = new CompilationBackgroundFile(
+                sourceFile, "domain/entities.md", markdownContent);
+        request.setCompilationBackgroundPayload(new CompilationBackgroundPayload(List.of(bgFile)));
+
         ReinsConfig config = loggingEnabledConfig();
         config.getReasoning().setLogSystemContext(true);
 
@@ -376,7 +386,7 @@ public class DefaultReasoningServiceLoggingTest {
         when(inferenceService.infer(any(), any())).thenReturn(firstResponse, secondResponse);
 
         when(promptBuilder.buildPrompt(any(), any(), any(), anyBoolean())).thenReturn("prompt-1", "prompt-2");
-        when(mcpResultFormatter.format(any())).thenReturn("mcp-read-summary");
+        when(toolResultFormatter.format(any())).thenReturn("tool-read-summary");
 
         ResponseDirective waitDirective = mock(ResponseDirective.class);
         when(waitDirective.isValid()).thenReturn(true);
@@ -406,7 +416,7 @@ public class DefaultReasoningServiceLoggingTest {
         );
         readResult.setResolvedBase("main");
         readResult.setContent("Top secret content");
-        when(mcpService.execute(any(), any(), any(), any())).thenReturn(readResult);
+        when(toolingService.execute(any(), any(), any(), any())).thenReturn(readResult);
 
         ReasoningRequest request = new ReasoningRequest();
         request.setMessage("Initial context");
@@ -506,6 +516,10 @@ public class DefaultReasoningServiceLoggingTest {
         mappings.setTestRoot(tempDir.resolve("src/test/nl"));
         mappings.setTargetRoot(tempDir.resolve("src"));
         request.setBaseMappings(mappings);
+
+        CompilationBackgroundFile bgFile = new CompilationBackgroundFile(
+                sourceFile, "domain/entities.md", "# Entities\n");
+        request.setCompilationBackgroundPayload(new CompilationBackgroundPayload(List.of(bgFile)));
 
         ReinsConfig config = loggingEnabledConfig();
         config.getReasoning().setLogSystemContext(true);

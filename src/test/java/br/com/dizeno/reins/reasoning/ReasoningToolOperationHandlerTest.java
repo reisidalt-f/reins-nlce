@@ -50,12 +50,12 @@ class ReasoningToolOperationHandlerTest {
             new ConcurrentHashMap<>());
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest first = new br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest();
-        first.setOperation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.ADD_INFERENCE_NOTE);
+        first.setOperation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.ADD_REASONING_NOTE);
         first.setCompiled("target:com/dizeno/mdwriter/editor/EditorState.java");
         first.setNote("Add setDocument support for MainWindow");
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest second = new br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest();
-        second.setOperation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.ADD_INFERENCE_NOTE);
+        second.setOperation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.ADD_REASONING_NOTE);
         second.setCompiled("target:com/dizeno/mdwriter/editor/input/InputHandler.java");
         second.setNote("Fix missing command constructors and symbols");
 
@@ -74,7 +74,7 @@ class ReasoningToolOperationHandlerTest {
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest first = new br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest();
         first.setOperation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.RUN_SCRIPT);
-        first.setScript("compile-one-java.sh");
+        first.setScript("run-build.sh");
         first.setArgs(java.util.List.of("com/example/App.java"));
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest second = new br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest();
@@ -233,22 +233,47 @@ class ReasoningToolOperationHandlerTest {
     }
 
     @Test
-    void blocksMutationWhenActiveSourceHasNoTrackingRecordButTargetIsOwnedByAnother() throws Exception {
-        
-        
-        
+    void grantFileOwnershipDefaultIsTrueInToolingSettings() {
+        br.com.dizeno.reins.run.config.settings.ToolingSettings settings = new br.com.dizeno.reins.run.config.settings.ToolingSettings();
+        assertTrue(settings.isGrantFileOwnership());
+    }
+
+    @Test
+    void grantsOwnershipAndDisownsPreviousOwnerWhenGrantFileOwnershipIsTrue() throws Exception {
         ReasoningToolOperationHandler handler = newHandler();
-        
-        
         saveRecord("main:Other.md", Map.of(), mapOf("target:gen/Other.java"));
 
         ReferenceMutationDecision decision = handler.evaluateReferenceMutationDecision(
                 requestForSource("main:Self.md"),
                 mutation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.WRITE_FILE, "target", "gen/Other.java"),
-                resolver());
+                resolver(),
+                true);
+
+        assertFalse(decision.isBlocked());
+        assertEquals(ReferenceMutationDecision.ReasonCode.ALLOW_NO_CONFLICT, decision.getReasonCode());
+
+        CompilationTrackingStore store = new CompilationTrackingStore();
+        SourceTrackingRecord otherRecord = store.load(projectRoot, "main:Other.md").orElseThrow();
+        assertFalse(otherRecord.getCompiledFiles().containsKey("target:gen/Other.java"));
+    }
+
+    @Test
+    void blocksMutationWhenActiveSourceHasNoTrackingRecordButTargetIsOwnedByAnotherAndGrantFileOwnershipIsFalse() throws Exception {
+        ReasoningToolOperationHandler handler = newHandler();
+        saveRecord("main:Other.md", Map.of(), mapOf("target:gen/Other.java"));
+
+        ReferenceMutationDecision decision = handler.evaluateReferenceMutationDecision(
+                requestForSource("main:Self.md"),
+                mutation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.WRITE_FILE, "target", "gen/Other.java"),
+                resolver(),
+                false);
 
         assertTrue(decision.isBlocked());
         assertEquals(ReferenceMutationDecision.ReasonCode.BLOCK_FOREIGN_OWNED, decision.getReasonCode());
+
+        CompilationTrackingStore store = new CompilationTrackingStore();
+        SourceTrackingRecord otherRecord = store.load(projectRoot, "main:Other.md").orElseThrow();
+        assertTrue(otherRecord.getCompiledFiles().containsKey("target:gen/Other.java"));
     }
 
     private ReasoningToolOperationHandler newHandler() {

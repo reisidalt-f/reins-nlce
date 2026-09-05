@@ -45,14 +45,14 @@ class ReferenceImmutabilityReasoningTest {
         InferenceService inferenceService = mock(InferenceService.class);
         ResponseDirectiveParser parser = mock(ResponseDirectiveParser.class);
         ReasoningPromptBuilder promptBuilder = mock(ReasoningPromptBuilder.class);
-        br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService = mock(br.com.dizeno.reins.reasoning.tooling.ToolingService.class);
+        br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService = mock(br.com.dizeno.reins.reasoning.tooling.ToolingService.class);
         br.com.dizeno.reins.reasoning.ToolResultFormatter formatter = mock(br.com.dizeno.reins.reasoning.ToolResultFormatter.class);
 
         DefaultReasoningService service = new DefaultReasoningService(
                 inferenceService,
                 parser,
                 promptBuilder,
-                mcpService,
+                toolingService,
                 formatter,
                 new FileReasoningLogService(),
             new CompilationTrackingStore()
@@ -66,7 +66,7 @@ class ReferenceImmutabilityReasoningTest {
 
         when(promptBuilder.buildPrompt(any(), any(), any(), anyBoolean())).thenReturn("prompt-1", "prompt-2");
         when(formatter.format(any())).thenReturn("blocked");
-        when(mcpService.execute(any(), any(), any(), any())).thenReturn(
+        when(toolingService.execute(any(), any(), any(), any())).thenReturn(
             br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.error(
                 br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.WRITE_FILE,
                 "target:/main/java/ref/RefCompiled.java",
@@ -99,9 +99,11 @@ class ReferenceImmutabilityReasoningTest {
         request.setSourceScope("main");
         request.setBaseMappings(createBaseMappings());
 
-        ReasoningResult result = service.runCycle(request, new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        ReasoningResult result = service.runCycle(request, config);
 
-        verify(mcpService, times(1)).execute(any(), any(), any(), any());
+        verify(toolingService, times(1)).execute(any(), any(), any(), any());
         assertEquals("finish_success", result.getFinalIntent());
     }
 

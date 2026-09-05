@@ -39,20 +39,17 @@ public class SourceFileProcessor {
      * Processes the target elements.
      *
      * @param sourceFile the source file to process
-     * @param runProjectInference the run project inference
      * @param config the Reins configuration settings
      * @param projectRoot the root path of the project
      * @param log the logger instance
      * @return the resulting result
      */
     public ProcessingResult process(File sourceFile,
-                                    boolean runProjectInference,
                                     ReinsConfig config,
                                     Path projectRoot,
                                     Log log) throws Exception {
         CompilationSummary summary = compilationService.processFiles(
                 List.of(sourceFile),
-                runProjectInference,
                 config,
                 projectRoot,
                 log);
@@ -63,7 +60,7 @@ public class SourceFileProcessor {
         String state = success ? "committed" : "failed";
         boolean printProvider = config.getLogging() != null && config.getLogging().isLlmProvider();
         String providerPrefix = printProvider
-                ? "provider=" + (config.getProvider() == null ? "gemini" : config.getProvider()) + ", "
+                ? "provider=" + (config.getProvider() == null ? "" : config.getProvider()) + ", "
                 : "";
         String message = providerPrefix
                 + "processed=" + summary.getProcessed()

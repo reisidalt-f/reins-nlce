@@ -48,7 +48,7 @@ class CompilationServiceLogToggleTest {
         ReinsConfig config = baseConfig(false, false, false);
         RecordingLog log = new RecordingLog();
 
-        service.processFiles(List.of(createSourceFile("feature-a.md")), false, config, projectRoot, log);
+        service.processFiles(List.of(createSourceFile("feature-a.md")), config, projectRoot, log);
 
         assertFalse(log.hasInfoStartingWith("Processing order: "));
     }
@@ -59,31 +59,42 @@ class CompilationServiceLogToggleTest {
         ReinsConfig config = baseConfig(false, true, false);
         RecordingLog log = new RecordingLog();
 
-        service.processFiles(List.of(createSourceFile("feature-b.md")), false, config, projectRoot, log);
+        service.processFiles(List.of(createSourceFile("feature-b.md")), config, projectRoot, log);
 
         assertTrue(log.hasInfoStartingWith("Processing order: "));
     }
 
     @Test
-    void trackingFileLoggingDisabledSuppressesSkippedTrackingMessage() throws Exception {
-        CompilationService service = createServiceWithSkipResult();
+    void trackingFileLoggingDisabledSuppressesTrackingMessage() throws Exception {
+        CompilationService service = createServiceWithCompileResult();
         ReinsConfig config = baseConfig(false, true, false, false);
         RecordingLog log = new RecordingLog();
 
-        service.processFiles(List.of(createSourceFile("feature-c.md")), false, config, projectRoot, log);
+        service.processFiles(List.of(createSourceFile("feature-c.md")), config, projectRoot, log);
 
-        assertFalse(log.hasInfoContaining("Tracking file written (skipped):"));
+        assertFalse(log.hasInfoContaining("Tracking file written"));
     }
 
     @Test
-    void trackingFileLoggingEnabledEmitsSkippedTrackingMessage() throws Exception {
+    void trackingFileLoggingEnabledEmitsTrackingMessage() throws Exception {
+        CompilationService service = createServiceWithCompileResult();
+        ReinsConfig config = baseConfig(true, false, false, true);
+        RecordingLog log = new RecordingLog();
+
+        service.processFiles(List.of(createSourceFile("feature-d.md")), config, projectRoot, log);
+
+        assertTrue(log.hasInfoContaining("Tracking file written:"));
+    }
+
+    @Test
+    void skippedSourceDoesNotEmitTrackingFileWrittenMessage() throws Exception {
         CompilationService service = createServiceWithSkipResult();
         ReinsConfig config = baseConfig(true, false, false, true);
         RecordingLog log = new RecordingLog();
 
-        service.processFiles(List.of(createSourceFile("feature-d.md")), false, config, projectRoot, log);
+        service.processFiles(List.of(createSourceFile("feature-skipped.md")), config, projectRoot, log);
 
-        assertTrue(log.hasInfoContaining("Tracking file written (skipped):"));
+        assertFalse(log.hasInfoContaining("Tracking file written"));
     }
 
     @Test
@@ -92,7 +103,7 @@ class CompilationServiceLogToggleTest {
         ReinsConfig config = baseConfig(false, false, false);
         RecordingLog log = new RecordingLog();
 
-        service.processFiles(List.of(createSourceFile("feature-e.md")), false, config, projectRoot, log);
+        service.processFiles(List.of(createSourceFile("feature-e.md")), config, projectRoot, log);
 
         assertFalse(log.hasInfoContaining("[empty-response-retry]"));
     }
@@ -112,14 +123,41 @@ class CompilationServiceLogToggleTest {
                 new MarkdownDependencyGraphBuilder(),
                 new ProcessingOrderResolver(),
                 reasoningService,
-                new ProjectContextService(),
-                null);
+                new ProjectContextService());
+    }
+
+    private CompilationService createServiceWithCompileResult() throws Exception {
+        InferenceService inferenceService = mock(InferenceService.class);
+        ReasoningService reasoningService = mock(ReasoningService.class);
+        when(reasoningService.runCycle(any(), any())).thenReturn(compileResult());
+
+        return new CompilationService(
+                inferenceService,
+                new OutputWriter(),
+                new ResultPrinter(),
+                new CompilationTrackingStore(),
+                new SourceFingerprintService(),
+                new RecompilationDecider(),
+                new MarkdownDependencyGraphBuilder(),
+                new ProcessingOrderResolver(),
+                reasoningService,
+                new ProjectContextService());
     }
 
     private ReasoningResult skipResult() {
         ReasoningResult result = new ReasoningResult();
         result.setFinalIntent("finish_success");
         result.setWrittenPaths(List.of());
+        result.setInspectedPaths(List.of());
+        result.setReadMarkdownPaths(List.of());
+        result.setToolInfoPhrases(List.of());
+        return result;
+    }
+
+    private ReasoningResult compileResult() {
+        ReasoningResult result = new ReasoningResult();
+        result.setFinalIntent("finish_success");
+        result.setWrittenPaths(List.of("target:com/example/Output.java"));
         result.setInspectedPaths(List.of());
         result.setReadMarkdownPaths(List.of());
         result.setToolInfoPhrases(List.of());
@@ -139,7 +177,10 @@ class CompilationServiceLogToggleTest {
 
     private ReinsConfig baseConfig(boolean skipped, boolean processingOrder, boolean eagerlyProvided, boolean trackingFile) {
         ReinsConfig config = new ReinsConfig();
-        config.setScanRoots(List.of(projectRoot.resolve("src/main/nl").toFile()));
+        config.setSourceBase("main", projectRoot.resolve("src/main/nl").toFile());
+        TargetSettings target = new TargetSettings();
+        target.setTargetBase("main", "src/main/java");
+        config.setTarget(target);
         config.setIncludePattern("**/*.md");
         config.setFailOnError(false);
 

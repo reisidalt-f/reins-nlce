@@ -13,9 +13,7 @@ package br.com.dizeno.reins.reasoning.inference.llm.adapters;
 
 import br.com.dizeno.reins.run.config.*;
 import br.com.dizeno.reins.reasoning.inference.llm.providers.gemini.GeminiClient;
-import br.com.dizeno.reins.reasoning.inference.llm.providers.gemini.GeminiPromptBuilder;
 import br.com.dizeno.reins.reasoning.inference.llm.providers.gemini.GeminiRequestParams;
-import br.com.dizeno.reins.reasoning.inference.MarkdownInferenceRequest;
 import br.com.dizeno.reins.reasoning.inference.llm.model.AdapterValidationResult;
 import br.com.dizeno.reins.reasoning.inference.llm.model.LlmRequest;
 import br.com.dizeno.reins.reasoning.inference.llm.model.LlmResponse;
@@ -33,24 +31,21 @@ import java.util.Map;
  * Acts as a adapter mapping external APIs to reins's internal interfaces.
  */
 public class GeminiProviderAdapter implements ProviderAdapter {
-    private final GeminiPromptBuilder promptBuilder;
     private final GeminiClient geminiClient;
 
     /**
      * Constructs a new instance of {@link GeminiProviderAdapter}.
      */
     public GeminiProviderAdapter() {
-        this(new GeminiPromptBuilder(), new GeminiClient());
+        this(new GeminiClient());
     }
 
     /**
      * Constructs a new instance of {@link GeminiProviderAdapter}.
      *
-     * @param promptBuilder the prompt builder
      * @param geminiClient the gemini client
      */
-    public GeminiProviderAdapter(GeminiPromptBuilder promptBuilder, GeminiClient geminiClient) {
-        this.promptBuilder = promptBuilder;
+    public GeminiProviderAdapter(GeminiClient geminiClient) {
         this.geminiClient = geminiClient;
     }
 
@@ -116,20 +111,15 @@ public class GeminiProviderAdapter implements ProviderAdapter {
     @Override
     public LlmResponse invoke(LlmRequest request, ReinsConfig config) throws Exception {
         GeminiRequestParams params = buildParams(config);
-        String raw;
-        if (request.getConversationHistory() != null && !request.getConversationHistory().isEmpty()) {
-            raw = geminiClient.compileWithHistory(
-                    params,
-                    request.getConversationHistory(),
-                    request.getCachedContentId(),
-                    request.isUseCachedContent());
-        } else {
-            MarkdownInferenceRequest promptRequest = new MarkdownInferenceRequest();
-            promptRequest.setSourcePath(request.getSourcePath());
-            promptRequest.setSourceScope(request.getSourceScope());
-            promptRequest.setMarkdownContent(request.getMarkdownContent());
-            raw = geminiClient.compile(params, promptBuilder.buildPrompt(promptRequest));
+        List<ConversationMessage> history = request.getConversationHistory();
+        if (history == null || history.isEmpty()) {
+            throw new IllegalArgumentException("Conversation history is required for Gemini provider invocation");
         }
+        String raw = geminiClient.compileWithHistory(
+                params,
+                history,
+                request.getCachedContentId(),
+                request.isUseCachedContent());
 
         LlmResponse response = new LlmResponse();
         response.setRequestId(request.getRequestId());
@@ -172,6 +162,8 @@ public class GeminiProviderAdapter implements ProviderAdapter {
                 config.getGemini().getRetryAttempts(),
                 config.getGemini().getEmptyResponseRetryDelayMs(),
                 config.isVerbose(),
-                config.getGemini().getGeneration());
+                config.getGemini().getGeneration(),
+                config.getContext());
     }
+
 }

@@ -27,21 +27,18 @@ import org.mockito.ArgumentCaptor;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
- 
 class CompileMojoSourceEmptyTest {
 
     @TempDir
@@ -72,11 +69,13 @@ class CompileMojoSourceEmptyTest {
         mojo.setLog(log);
 
         setField(mojo, "project", project);
-        setField(mojo, "includePattern", "**/*.md");
+        Files.createDirectories(projectDir.resolve("src/main/nl"));
+        java.util.Map<String, File> sourceBases = new java.util.LinkedHashMap<>();
+        sourceBases.put("main", projectDir.resolve("src/main/nl").toFile());
+        setField(mojo, "sources", sourceBases);
         TargetSettings targetSettings = new TargetSettings();
-        targetSettings.setProject(projectDir.toFile());
-        targetSettings.setMain("src/main/java");
-        targetSettings.setTest("src/test/java");
+        targetSettings.setTargetBase("main", "src/main/java");
+        targetSettings.setTargetBase("test", "src/test/java");
         setField(mojo, "target", targetSettings);
 
         GeminiSettings gemini = new GeminiSettings();
@@ -85,97 +84,19 @@ class CompileMojoSourceEmptyTest {
         gemini.setEndpoint("https://generativelanguage.googleapis.com");
         gemini.setTimeoutSeconds(30);
         gemini.setRetryAttempts(1);
+        setField(mojo, "provider", "gemini");
         setField(mojo, "gemini", gemini);
-
-        
-        
-    }
-
-    
-
-    @Test
-    void execute_sourceEmpty_inferenceEnabled_callsProcessFilesWithEmptyList() throws Exception {
-        File projectFile = projectDir.resolve("project.md").toFile();
-        projectFile.createNewFile();
-        setField(mojo, "projectContextFile", projectFile);
-        setField(mojo, "enableProjectInference", true);
-
-        when(preFilterService.filter(any(), any(), any(), any()))
-                .thenAnswer(inv -> PreFilterResult.failOpen(inv.getArgument(0)));
-        when(compilationService.processFiles(any(), any(Boolean.class), any(), any(), any()))
-                .thenReturn(new CompilationSummary());
-
-        mojo.execute();
-
-        verify(compilationService).processFiles(
-                org.mockito.ArgumentMatchers.eq(List.of()),
-                any(Boolean.class),
-                any(),
-                any(),
-                any());
     }
 
     @Test
-    void execute_sourceEmpty_inferenceDisabled_doesNotCallProcessFiles() throws Exception {
-        setField(mojo, "enableProjectInference", false);
-        
-
+    void execute_sourceEmpty_doesNotCallProcessFiles() throws Exception {
         assertDoesNotThrow(() -> mojo.execute());
 
-        verify(compilationService, never()).processFiles(any(), any(Boolean.class), any(), any(), any());
+        verify(compilationService, never()).processFiles(any(PreFilterResult.class), any(), any(), any());
     }
 
     @Test
-    void execute_inferenceEnabled_missingProjectFile_throwsMojoExecutionException() throws Exception {
-        File missingFile = projectDir.resolve("project.md").toFile();
-        
-        setField(mojo, "projectContextFile", missingFile);
-        setField(mojo, "enableProjectInference", true);
-
-        assertThrows(MojoExecutionException.class, () -> mojo.execute());
-
-        verify(compilationService, never()).processFiles(any(), any(Boolean.class), any(), any(), any());
-    }
-
-    @Test
-    void execute_sourceEmpty_inferenceEnabled_buildSucceeds() throws Exception {
-        File projectFile = projectDir.resolve("project.md").toFile();
-        projectFile.createNewFile();
-        setField(mojo, "projectContextFile", projectFile);
-        setField(mojo, "enableProjectInference", true);
-
-        when(preFilterService.filter(any(), any(), any(), any()))
-                .thenAnswer(inv -> PreFilterResult.failOpen(inv.getArgument(0)));
-        when(compilationService.processFiles(any(), any(Boolean.class), any(), any(), any()))
-                .thenReturn(new CompilationSummary());
-
-        assertDoesNotThrow(() -> mojo.execute());
-    }
-
-    
-
-    @Test
-    void execute_sourceEmpty_inferenceEnabled_logsFR003Message() throws Exception {
-        File projectFile = projectDir.resolve("project.md").toFile();
-        projectFile.createNewFile();
-        setField(mojo, "projectContextFile", projectFile);
-        setField(mojo, "enableProjectInference", true);
-
-        when(preFilterService.filter(any(), any(), any(), any()))
-                .thenAnswer(inv -> PreFilterResult.failOpen(inv.getArgument(0)));
-        when(compilationService.processFiles(any(), any(Boolean.class), any(), any(), any()))
-                .thenReturn(new CompilationSummary());
-
-        mojo.execute();
-
-        verify(log).info(
-                "No source instruction files found in scan roots. Project inference cycle will proceed.");
-    }
-
-    @Test
-    void execute_sourceEmpty_inferenceDisabled_logsFR004Message() throws Exception {
-        setField(mojo, "enableProjectInference", false);
-
+    void execute_sourceEmpty_logsNoInferenceMessage() throws Exception {
         mojo.execute();
 
         verify(log).info(
@@ -185,7 +106,6 @@ class CompileMojoSourceEmptyTest {
     @Test
     void execute_verboseMode_doesNotLogProviderDetails() throws Exception {
         setField(mojo, "verbose", true);
-        setField(mojo, "enableProjectInference", false);
 
         mojo.execute();
 
@@ -199,45 +119,6 @@ class CompileMojoSourceEmptyTest {
         assertTrue(infoMessages.stream().noneMatch(m -> m.startsWith("Gemini apiKey:")),
                 "Gemini apiKey must not be logged");
     }
-
-    @Test
-    void execute_warnsWhenDeprecatedTargetRootIsConfigured() throws Exception {
-        TargetSettings targetSettings = new TargetSettings();
-        targetSettings.setLegacyRootAlias(projectDir.resolve("compiled/project").toFile());
-        setField(mojo, "target", targetSettings);
-
-        mojo.execute();
-
-        verify(log, times(1)).warn("target.root is deprecated; use target.project instead.");
-    }
-
-    
-
-    @Test
-    void execute_sourceEmpty_inferenceEnabled_skippedSummaryLogged() throws Exception {
-        File projectFile = projectDir.resolve("project.md").toFile();
-        projectFile.createNewFile();
-        setField(mojo, "projectContextFile", projectFile);
-        setField(mojo, "enableProjectInference", true);
-
-        when(preFilterService.filter(any(), any(), any(), any()))
-                .thenAnswer(inv -> PreFilterResult.failOpen(inv.getArgument(0)));
-        CompilationSummary summary = new CompilationSummary();
-        summary.incrementSkipped(); 
-        when(compilationService.processFiles(any(), any(Boolean.class), any(), any(), any())).thenReturn(summary);
-
-        mojo.execute();
-
-        ArgumentCaptor<String> logCaptor = ArgumentCaptor.forClass(String.class);
-        verify(log, atLeastOnce()).info(logCaptor.capture());
-        boolean skippedInSummary = logCaptor.getAllValues().stream()
-                .anyMatch(msg -> msg.contains("skipped=1"));
-        assertTrue(skippedInSummary,
-                "Expected summary INFO log to contain 'skipped=1' but logged: "
-                        + logCaptor.getAllValues());
-    }
-
-    
 
     private static void setField(Object target, String name, Object value) throws Exception {
         Field field = findField(target.getClass(), name);

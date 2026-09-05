@@ -73,7 +73,11 @@ class DefaultReasoningServiceReferenceTreeTest {
         );
 
         ReasoningRequest request = baseRequest(root);
-        ReasoningResult result = service.runCycle(request, new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        config.getContext().getReferencesTree().setAttachFiles(true);
+        config.getContext().getReferencesTree().setDepth("1");
+        ReasoningResult result = service.runCycle(request, config);
 
         MarkdownInferenceRequest sent = org.mockito.Mockito.mockingDetails(inferenceService)
                 .getInvocations()
@@ -105,14 +109,17 @@ class DefaultReasoningServiceReferenceTreeTest {
         assertTrue(systemContext.getText().contains("root.md"));
         assertTrue(systemContext.getText().contains("child.md"));
         assertFalse(systemContext.getText().contains("grandchild.md"));
-        assertTrue(firstUser.getText().contains("Compile the main source file:"));
-        assertTrue(firstUser.getText().contains("main:root.md"));
+        assertTrue(firstUser.getText().contains("Compile this source file:"));
+        assertTrue(firstUser.getText().contains("root.md"));
 
         assertTrue(firstUser.getAttachments() == null || firstUser.getAttachments().isEmpty());
         assertNotNull(backgroundFiles.getAttachments());
-        assertEquals(2, backgroundFiles.getAttachments().size());
-        assertEquals("main:root.md", backgroundFiles.getAttachments().get(0).getQualifiedPath());
-        assertEquals("main:child.md", backgroundFiles.getAttachments().get(1).getQualifiedPath());
+        assertEquals(0, backgroundFiles.getAttachments().size());
+
+        assertNotNull(systemContext.getAttachments());
+        assertEquals(2, systemContext.getAttachments().size());
+        assertEquals("main:root.md", systemContext.getAttachments().get(0).getQualifiedPath());
+        assertEquals("main:child.md", systemContext.getAttachments().get(1).getQualifiedPath());
 
         assertNotNull(result.getFirstTurnReferenceTree());
         assertTrue(result.getFirstTurnReferenceTree().contains("child.md"));
@@ -156,7 +163,9 @@ class DefaultReasoningServiceReferenceTreeTest {
                 new CompilationTrackingStore()
         );
 
-        ReasoningResult result = service.runCycle(baseRequest(root), new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        ReasoningResult result = service.runCycle(baseRequest(root), config);
 
     MarkdownInferenceRequest sent = org.mockito.Mockito.mockingDetails(inferenceService)
         .getInvocations()
@@ -205,7 +214,8 @@ class DefaultReasoningServiceReferenceTreeTest {
         );
 
         ReinsConfig config = new ReinsConfig();
-        config.getContext().setAttachReferencedFiles(false);
+        config.setProvider("gemini");
+        config.getContext().getReferencesTree().setAttachFiles(false);
         service.runCycle(baseRequest(root), config);
 
         MarkdownInferenceRequest sent = org.mockito.Mockito.mockingDetails(inferenceService)
@@ -218,7 +228,7 @@ class DefaultReasoningServiceReferenceTreeTest {
 
         List<AttachedFilePayload> attachments = sent.getConversationHistory().stream()
             .filter(m -> m.getRole() == ConversationMessage.Role.SYSTEM)
-            .filter(m -> m.getText().contains("Background attachments passed to this cycle:"))
+            .filter(m -> m.getText().contains("Reference tree:"))
             .findFirst()
             .orElseThrow()
             .getAttachments();
@@ -254,7 +264,8 @@ class DefaultReasoningServiceReferenceTreeTest {
         );
 
         ReinsConfig config = new ReinsConfig();
-        config.getContext().setReferencesTreeDepth("0");
+        config.setProvider("gemini");
+        config.getContext().getReferencesTree().setDepth("0");
         ReasoningResult result = service.runCycle(baseRequest(root), config);
 
         assertNotNull(result.getFirstTurnReferenceTree());
@@ -291,7 +302,8 @@ class DefaultReasoningServiceReferenceTreeTest {
         );
 
         ReinsConfig config = new ReinsConfig();
-        config.getContext().setReferencesTreeDepth("2");
+        config.setProvider("gemini");
+        config.getContext().getReferencesTree().setDepth("2");
         ReasoningResult result = service.runCycle(baseRequest(root), config);
 
         assertTrue(result.getFirstTurnReferenceTree().contains("grandchild.md"));
@@ -327,7 +339,8 @@ class DefaultReasoningServiceReferenceTreeTest {
         );
 
         ReinsConfig config = new ReinsConfig();
-        config.getContext().setReferencesTreeDepth("*");
+        config.setProvider("gemini");
+        config.getContext().getReferencesTree().setDepth("*");
         ReasoningResult result = service.runCycle(baseRequest(root), config);
 
         assertTrue(result.getFirstTurnReferenceTree().contains("great-grandchild.md"));
@@ -348,12 +361,13 @@ class DefaultReasoningServiceReferenceTreeTest {
                 mock(br.com.dizeno.reins.reasoning.tooling.ToolingService.class),
                 mock(ToolResultFormatter.class),
                 new FileReasoningLogService(),
-            new CompilationTrackingStore()
+                new CompilationTrackingStore()
         );
 
         ReasoningRequest request = baseRequest(root);
         ReinsConfig config = new ReinsConfig();
-        config.getContext().setReferencesTreeDepth("*");
+        config.setProvider("gemini");
+        config.getContext().getReferencesTree().setDepth("*");
         ReasoningResult result = service.runCycle(request, config);
 
         assertEquals("finish_error", result.getFinalIntent());

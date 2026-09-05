@@ -72,35 +72,35 @@ public final class OutcomeBranchPhase implements CompilationPhase {
 
     private void handleNoopOutcome(SourceCompilationContext ctx) {
         boolean validateOnly = ctx.isValidateOnly();
-        ctx.getOutput().setStatus(validateOnly ? "validated" : "skipped");
-        ctx.getOutput().setMessage(validateOnly ? "validated-no-change" : "reasoning-finish-no-output");
-        if (validateOnly) {
-            ctx.getSummary().incrementProcessed();
-        } else {
-            ctx.getSummary().incrementSkipped();
+        ctx.getOutput().setStatus(validateOnly ? "validated" : "no-change");
+        ctx.getOutput().setMessage(validateOnly ? "validated-no-change" : "no-change");
+        ctx.getSummary().incrementProcessed();
+        if (!validateOnly) {
+            ctx.getSummary().incrementNoChange();
         }
         if (ctx.getPriorRecord() != null) {
             TrackingRecordHelper.physicallyTouchOutputs(ctx.getCanonicalSourcePath(), ctx.getPriorRecord(), ctx.getProjectRoot(), ctx.getConfig(), ctx.getLog(), ctx.isSkippedLoggingEnabled());
         }
-        if (ctx.getConfig().getTracking().isFreezeState()) {
-            ctx.getLog().info("[tracking] Freeze mode: skip record NOT written for " + PathLogFormatter.formatPath(ctx.getCanonicalSourcePath(), ctx.getProjectRoot()));
-        } else if (!ctx.getConfig().isDryRun()) {
-            try {
-                SourceTrackingRecord skipRecord = TrackingRecordHelper.copyTrackingRecord(ctx.getPriorRecord());
-                skipRecord.setSourcePath(ctx.getCanonicalSourcePath());
-                skipRecord.setSourceCategory(ctx.getSourceCategory());
-                skipRecord.setSourceHash(ctx.getSourceHash());
-                skipRecord.setBlockFingerprints(List.of(ctx.getSourceHash()));
-                skipRecord.setSourceModificationTime(ctx.getNode().lastModifiedMillis());
-                TrackingRecordHelper.refreshTrackedMtimes(skipRecord, ctx.getProjectRoot(), ctx.getResolvedTargetRoot(), ctx.getSourceCategory());
-                skipRecord.setLastStatus(validateOnly ? "validated" : "skipped");
-                skipRecord.setLastCompiledAt(Instant.now().toString());
-                ctx.getSourceTrackingManager().commit(ctx.getProjectRoot(), ctx.getCanonicalSourcePath(), skipRecord, ctx.getTrackingStore());
-                if (ctx.getConfig().getLogging() != null && ctx.getConfig().getLogging().isTrackingFile()) {
-                    ctx.getLog().info("Tracking file written (" + (validateOnly ? "validated" : "skipped") + "): " + PathLogFormatter.formatPath(ctx.getCanonicalSourcePath(), ctx.getProjectRoot()));
+        if (validateOnly || ctx.getPriorRecord() != null) {
+            if (ctx.getConfig().getTracking().isFreezeState()) {
+                ctx.getLog().info("[tracking] Freeze mode: tracking record NOT written for " + PathLogFormatter.formatPath(ctx.getCanonicalSourcePath(), ctx.getProjectRoot()));
+            } else if (!ctx.getConfig().isDryRun()) {
+                try {
+                    SourceTrackingRecord skipRecord = TrackingRecordHelper.copyTrackingRecord(ctx.getPriorRecord());
+                    skipRecord.setSourcePath(ctx.getCanonicalSourcePath());
+                    skipRecord.setSourceCategory(ctx.getSourceCategory());
+                    skipRecord.setSourceHash(ctx.getSourceHash());
+                    skipRecord.setBlockFingerprints(List.of(ctx.getSourceHash()));
+                    skipRecord.setSourceModificationTime(ctx.getNode().lastModifiedMillis());
+                    skipRecord.setLastStatus(validateOnly ? "validated" : "no-change");
+                    skipRecord.setLastCompiledAt(Instant.now().toString());
+                    ctx.getSourceTrackingManager().commit(ctx.getProjectRoot(), ctx.getCanonicalSourcePath(), skipRecord, ctx.getTrackingStore());
+                    if (ctx.getConfig().getLogging() != null && ctx.getConfig().getLogging().isTrackingFile()) {
+                        ctx.getLog().info("Tracking file written (" + (validateOnly ? "validated" : "no-change") + "): " + PathLogFormatter.formatPath(ctx.getCanonicalSourcePath(), ctx.getProjectRoot()));
+                    }
+                } catch (Exception ex) {
+                    ctx.getLog().warn("Could not write tracking file for " + PathLogFormatter.formatPath(ctx.getRelativeSourcePath(), ctx.getProjectRoot()) + ": " + ex.getMessage());
                 }
-            } catch (Exception ex) {
-                ctx.getLog().warn("Could not write skip/validation tracking file for " + PathLogFormatter.formatPath(ctx.getRelativeSourcePath(), ctx.getProjectRoot()) + ": " + ex.getMessage());
             }
         }
         ctx.getWorkSetEntry().markProcessed();
@@ -110,7 +110,7 @@ public final class OutcomeBranchPhase implements CompilationPhase {
         }
     }
 
-    
+    /* package */
 
     private void handleSuccessOutcome(SourceCompilationContext ctx) throws Exception {
         ReasoningResult reasoningResult = ctx.getReasoningResult();
@@ -134,6 +134,10 @@ public final class OutcomeBranchPhase implements CompilationPhase {
             ctx.getTrackingStore().load(ctx.getProjectRoot(), ctx.getCanonicalSourcePath()).orElse(null),
             ctx.getCanonicalSourcePath(),
             ctx.getLog());
+
+        if (ctx.getConfig() != null && ctx.getConfig().isFreshCompilation() && previous != null && previous.getCompiledFiles() != null) {
+            previous.getCompiledFiles().clear();
+        }
 
         Set<String> currentMarkdownReferencePaths = new LinkedHashSet<>(ctx.getGraph().getChildren(ctx.getRelativeSourcePath()));
         if (reasoningResult != null && reasoningResult.getReadMarkdownPaths() != null
@@ -178,7 +182,9 @@ public final class OutcomeBranchPhase implements CompilationPhase {
             }
         }
 
-        if (!ctx.getConfig().isExplicitSourceMode()) {
+        boolean cleanupStaleCompiledFiles = ctx.getConfig().getTracking() != null && ctx.getConfig().getTracking().isCleanupStaleCompiledFiles();
+
+        if (!cleanupStaleCompiledFiles && !(ctx.getConfig() != null && ctx.getConfig().isFreshCompilation())) {
             TrackingRecordHelper.preserveExistingCompiledFiles(ctx.getProjectRoot(), previous, resolvedTargetRoot, sourceCategory,
                 compiled, compiledFileCategories);
         }
@@ -186,6 +192,14 @@ public final class OutcomeBranchPhase implements CompilationPhase {
         Map<String, Long> postMtimes = TrackingRecordHelper.snapshotOutputMtimes(ctx.getProjectRoot(), compiled, resolvedTargetRoot);
 
         Map<String, Long> inspectedMtimes = TrackingRecordHelper.snapshotOutputMtimes(ctx.getProjectRoot(), inspected, resolvedTargetRoot);
+
+        boolean compiledOutputsChanged = TrackingRecordHelper.outputsChanged(previous, compiled, preMtimes, postMtimes);
+        if (compiledOutputsChanged) {
+            flagReferencingSourcesForValidation(ctx);
+        }
+
+        String effectiveStatus = validateOnly ? "validated" : (compiledOutputsChanged ? "compiled" : "no-change");
+        String trackingStatus = validateOnly ? "validated" : (compiledOutputsChanged ? "success" : "no-change");
 
         SourceTrackingRecord record = TrackingRecordHelper.buildTrackingRecord(new TrackingRecordHelper.TrackingParams(
             ctx.getCanonicalSourcePath(),
@@ -202,7 +216,8 @@ public final class OutcomeBranchPhase implements CompilationPhase {
             markdownSnapshot.mtimes(),
             ctx.getConfig(),
             resolvedTargetRoot,
-            resolvedTargetRoot
+            resolvedTargetRoot,
+            trackingStatus
         ), ctx.getFingerprintService());
         if (ctx.getConfig().getTracking().isFreezeState()) {
             ctx.getLog().info("[tracking] Freeze mode: tracking record NOT written for " + PathLogFormatter.formatPath(ctx.getCanonicalSourcePath(), ctx.getProjectRoot()));
@@ -211,23 +226,20 @@ public final class OutcomeBranchPhase implements CompilationPhase {
             if (ctx.getConfig().getLogging() != null && ctx.getConfig().getLogging().isTrackingFile()) {
                 ctx.getLog().info("Tracking file written: " + PathLogFormatter.formatPath(ctx.getCanonicalSourcePath(), ctx.getProjectRoot()));
             }
-            if (ctx.getConfig().isExplicitSourceMode()) {
+            if (cleanupStaleCompiledFiles) {
                 TrackingRecordHelper.cleanupStaleCompiledFiles(ctx.getProjectRoot(), previous, compiled, resolvedTargetRoot, ctx.getLog());
             }
         }
 
-        boolean compiledOutputsChanged = TrackingRecordHelper.outputsChanged(previous, compiled, preMtimes, postMtimes);
-        if (compiledOutputsChanged) {
-            flagReferencingSourcesForValidation(ctx);
-        }
-
-        ctx.getOutput().setStatus(validateOnly ? "validated" : "compiled");
+        ctx.getOutput().setStatus(effectiveStatus);
         ctx.getOutput().setOutputPath(String.join(",", compiled));
         ctx.getOutput().setMessage(validateOnly
                 ? (compiledOutputsChanged ? "validated-with-fixes" : "validated-no-change")
-                : "ok");
+                : (compiledOutputsChanged ? "ok" : "no-change"));
         if (compiledOutputsChanged) {
             ctx.getSummary().incrementCompiled();
+        } else if (!validateOnly) {
+            ctx.getSummary().incrementNoChange();
         }
         
         

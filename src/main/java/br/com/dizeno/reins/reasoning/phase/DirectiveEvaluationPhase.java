@@ -22,6 +22,7 @@ import br.com.dizeno.reins.reasoning.ResponseDirectiveParser;
 import br.com.dizeno.reins.reasoning.SpoofingMessageValidator;
 import br.com.dizeno.reins.reasoning.PipelineExchangeMessage;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * DirectiveEvaluationPhase is part of the execution phases representing distinct steps during reasoning turns in the reins architecture.
@@ -68,15 +69,26 @@ public class DirectiveEvaluationPhase implements ReasoningPhase {
         context.setTurnParseResult(parsed);
         context.getTurnInbound().setDirective(directive);
 
-        if (directive.isValid()
-                && directive.getContentType() == ResponseDirective.ContentType.MESSAGE_TO_USER
-                && parsed.getBody() != null
-                && !parsed.getBody().isBlank()) {
-            context.getUserFacingMessages().add(parsed.getBody().trim());
-            if (context.getRequest().getUserMessageListener() != null) {
-                try {
-                    context.getRequest().getUserMessageListener().accept(parsed.getBody().trim());
-                } catch (Exception ignored) {
+        List<ResponseDirectiveParser.ParseResult> blocks = parsed.getBlocks();
+        if (blocks != null) {
+            for (ResponseDirectiveParser.ParseResult block : blocks) {
+                ResponseDirective bd = block.getDirective();
+                if (bd.isValid()) {
+                    if (bd.getContentType() == ResponseDirective.ContentType.MESSAGE_TO_USER
+                            && block.getBody() != null
+                            && !block.getBody().isBlank()) {
+                        context.getUserFacingMessages().add(block.getBody().trim());
+                        if (context.getRequest().getUserMessageListener() != null) {
+                            try {
+                                context.getRequest().getUserMessageListener().accept(block.getBody().trim());
+                            } catch (Exception ignored) {
+                            }
+                        }
+                    } else if (bd.getContentType() == ResponseDirective.ContentType.CONVERSATION_SUMMARY
+                            && block.getBody() != null
+                            && !block.getBody().isBlank()) {
+                        context.setLatestConversationSummary(block.getBody().trim());
+                    }
                 }
             }
         }
@@ -86,7 +98,7 @@ public class DirectiveEvaluationPhase implements ReasoningPhase {
             context.getTurnInbound().setFulfilled(false);
             context.getTurnInbound().setFailureClass("parse-error");
 
-            String correctiveMessage = coordinator.renderPipelineGeminiMessageWithFailureLogging(
+            String correctiveMessage = coordinator.renderPipelineMessageToModelWithFailureLogging(
                     context.getCycleLog(),
                     context.getTurnInbound().getSequence(),
                     context.getCurrentPipelinePhase(),
@@ -166,7 +178,7 @@ public class DirectiveEvaluationPhase implements ReasoningPhase {
         } else {
             
             if (directive.isNonFinishUserMessage()) {
-                String nextMessage = coordinator.renderPipelineGeminiMessageWithFailureLogging(
+                String nextMessage = coordinator.renderPipelineMessageToModelWithFailureLogging(
                         context.getCycleLog(),
                         context.getTurnInbound().getSequence(),
                         context.getCurrentPipelinePhase(),

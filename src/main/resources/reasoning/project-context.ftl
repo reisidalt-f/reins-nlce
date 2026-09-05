@@ -1,9 +1,9 @@
 <#-- project-context.ftl: Renders project compilation background files section. PROMPT_ASSEMBLY phase.
      Replicates the compilation background section in ReasoningPromptBuilder.buildFirstTurnPrompt(). -->
-<#if project.attachments?has_content>
+<#if attachments?has_content>
 
 Compilation background files (attached):
-<#list project.attachments as att>
+<#list attachments as att>
 ${att.path}
 </#list>
 

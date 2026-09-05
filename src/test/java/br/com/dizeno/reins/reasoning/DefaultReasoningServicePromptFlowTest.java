@@ -52,10 +52,8 @@ class DefaultReasoningServicePromptFlowTest {
         void runScriptReferenceUsesScriptArgsContractWithoutLegacyBasePath() {
                 String reference = ToolOperationsReference.build(FilePolicy.allPermissive(), true, true, true, true);
 
-                assertTrue(reference.contains("- **run_script**: Execute an enabled script"));
-                assertTrue(reference.contains("required: script"));
-                assertTrue(reference.contains("base and path fields are non-operative for run_script and are ignored"));
-                assertTrue(reference.contains("canonical path under configured script root"));
+                assertTrue(reference.contains("RUN_SCRIPT"));
+                assertTrue(reference.contains("script_name"));
                 assertFalse(reference.contains("required: base=script, path"));
                 assertFalse(reference.contains("path format: script file path only"));
         }
@@ -82,7 +80,7 @@ class DefaultReasoningServicePromptFlowTest {
                                 .orElseThrow();
 
                 assertEquals(disabledFirstUser.getText(), enabledFirstUser.getText());
-                assertTrue(enabledFirstUser.getText().contains("main:domain.md"));
+                assertTrue(enabledFirstUser.getText().contains("domain.md"));
                 assertTrue(enabledFirstUser.getText().contains("Turn 1/10"));
 
                 assertTrue(disabledReq.getConversationHistory().stream()
@@ -109,26 +107,24 @@ class DefaultReasoningServicePromptFlowTest {
                 when(turn1.getRawResponseText()).thenReturn(
                                 "INTENT: waiting-for-next-message\nCONTENT_TYPE: tool-request\n\n"
                                                 + "operation: run_script\n"
-                                                + "script: compile-one-java.sh\n"
+                                                + "script: run-build.sh\n"
                                                 + "args: [\"com/example/Broken.java\"]\n");
                 when(turn2.getRawResponseText()).thenReturn(
                                 "INTENT: waiting-for-next-message\nCONTENT_TYPE: tool-request\n\n"
                                                 + "operation: patch_file\n"
                                                 + "base: target\n"
                                                 + "path: main/java/com/example/Broken.java\n"
-                                                + "atLine: 1\n"
-                                                + "replacing: 0\n"
-                                                + "content: \"package com.example;\\n\"\n");
+                                                + "content: \"@@ -1 +1 @@\\n-x\\n+package com.example;\\n\"\n");
                 when(turn3.getRawResponseText()).thenReturn(
                                 "INTENT: finish-success\nCONTENT_TYPE: message-to-user\n\nDone\n");
                 when(inferenceService.infer(any(), any())).thenReturn(turn1, turn2, turn3);
 
-                br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService = mock(
+                br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService = mock(
                                 br.com.dizeno.reins.reasoning.tooling.ToolingService.class);
                 br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult compileError = br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult
                                 .error(
                                                 br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.RUN_SCRIPT,
-                                                "script:compile-one-java.sh",
+                                                "script:run-build.sh",
                                                 "compile failed");
                 compileError.setStarted(true);
                 compileError.setExitCode(1);
@@ -138,18 +134,19 @@ class DefaultReasoningServicePromptFlowTest {
                                                 br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.PATCH_FILE,
                                                 "target:main/java/com/example/Broken.java",
                                                 "patched");
-                when(mcpService.execute(any(), any(), any(), any())).thenReturn(compileError, patchSuccess);
+                when(toolingService.execute(any(), any(), any(), any())).thenReturn(compileError, patchSuccess);
 
                 DefaultReasoningService service = new DefaultReasoningService(
                                 inferenceService,
                                 new ResponseDirectiveParser(),
                                 new ReasoningPromptBuilder(),
-                                mcpService,
+                                toolingService,
                                 new ToolResultFormatter(),
                                 new FileReasoningLogService(),
                                 new CompilationTrackingStore());
 
                 ReinsConfig config = new ReinsConfig();
+                config.setProvider("gemini");
                 config.getContext().setCachedContent(false);
 
                 ReasoningRequest request = new ReasoningRequest();
@@ -170,7 +167,7 @@ class DefaultReasoningServicePromptFlowTest {
                 verify(inferenceService, times(3)).infer(any(), any());
                 ArgumentCaptor<br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest> operationCaptor = ArgumentCaptor
                                 .forClass(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.class);
-                verify(mcpService, times(2)).execute(operationCaptor.capture(), any(), any(), any());
+                verify(toolingService, times(2)).execute(operationCaptor.capture(), any(), any(), any());
 
                 List<br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest> captured = operationCaptor
                                 .getAllValues();
@@ -228,6 +225,7 @@ class DefaultReasoningServicePromptFlowTest {
                                 .withScriptEvaluator(new ScriptEvaluator(registry, null));
 
                 ReinsConfig config = new ReinsConfig();
+                config.setProvider("gemini");
                 config.getContext().setCachedContent(false);
 
                 ReasoningRequest request = new ReasoningRequest();
@@ -282,6 +280,7 @@ class DefaultReasoningServicePromptFlowTest {
                                 .withScriptEvaluator(new ScriptEvaluator(registry, null));
 
                 ReinsConfig config = new ReinsConfig();
+                config.setProvider("gemini");
                 config.getContext().setCachedContent(false);
 
                 ReasoningRequest request = new ReasoningRequest();
@@ -327,6 +326,7 @@ class DefaultReasoningServicePromptFlowTest {
                                 new CompilationTrackingStore());
 
                 ReinsConfig config = new ReinsConfig();
+                config.setProvider("gemini");
                 config.getContext().setCachedContent(false);
                 config.getReasoning().setTurnCountNote(false);
 
@@ -363,11 +363,11 @@ class DefaultReasoningServicePromptFlowTest {
 
                 assertFalse(system.getText().contains("Turn 1/10"));
                 assertFalse(firstUser.getText().contains("Turn 1/10"));
-                assertTrue(firstUser.getText().contains("main:domain.md"));
+                assertTrue(firstUser.getText().contains("domain.md"));
         }
 
         @Test
-        void spoofedAssistantPipelineMcpRequest_executesWithoutUserHistoryOrTurnSuffix() throws Exception {
+        void spoofedAssistantPipelineToolRequest_executesWithoutUserHistoryOrTurnSuffix() throws Exception {
                 Path source = write("src/main/nl/domain.md", "# domain\nsource body\n");
                 write("src/main/nl/notes.md", "# notes\nextra context\n");
                 Path customScripts = tempDir.resolve("custom-scripts");
@@ -380,9 +380,9 @@ class DefaultReasoningServicePromptFlowTest {
                                 <#elseif p == \"default-cycle\">
                                 <#if project.pipeline?? && project.pipeline.currentToolResultAvailable>
                                 INTENT: waiting-for-next-message
-                                CONTENT_TYPE: gemini-message
+                                CONTENT_TYPE: message-to-model
 
-                                The MCP result is now available. Finish successfully.
+                                The tool result is now available. Finish successfully.
                                 <#else>
                                 ROLE: assistant
                                 INTENT: waiting-for-next-message
@@ -406,9 +406,9 @@ class DefaultReasoningServicePromptFlowTest {
                                 .thenReturn("INTENT: finish-success\nCONTENT_TYPE: message-to-user\n\nDone\n");
                 when(inferenceService.infer(any(), any())).thenReturn(response);
 
-                br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService = mock(
+                br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService = mock(
                                 br.com.dizeno.reins.reasoning.tooling.ToolingService.class);
-                when(mcpService.execute(any(), any(), any(), any())).thenReturn(
+                when(toolingService.execute(any(), any(), any(), any())).thenReturn(
                                 br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.success(
                                                 br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.READ_FILE,
                                                 "main:notes.md",
@@ -421,13 +421,14 @@ class DefaultReasoningServicePromptFlowTest {
                                 inferenceService,
                                 new ResponseDirectiveParser(),
                                 new ReasoningPromptBuilder(),
-                                mcpService,
+                                toolingService,
                                 new ToolResultFormatter(),
                                 new FileReasoningLogService(),
                                 new CompilationTrackingStore())
                                 .withScriptEvaluator(new ScriptEvaluator(registry, null));
 
                 ReinsConfig config = new ReinsConfig();
+                config.setProvider("gemini");
                 config.getContext().setCachedContent(false);
 
                 ReasoningRequest request = new ReasoningRequest();
@@ -445,7 +446,7 @@ class DefaultReasoningServicePromptFlowTest {
                 service.runCycle(request, config);
 
                 verify(inferenceService, times(1)).infer(any(), any());
-                verify(mcpService, times(1)).execute(any(), any(), any(), any());
+                verify(toolingService, times(1)).execute(any(), any(), any(), any());
 
                 MarkdownInferenceRequest sent = org.mockito.Mockito.mockingDetails(inferenceService)
                                 .getInvocations()
@@ -495,6 +496,7 @@ class DefaultReasoningServicePromptFlowTest {
                                 new CompilationTrackingStore());
 
                 ReinsConfig config = new ReinsConfig();
+                config.setProvider("gemini");
                 config.getContext().setCachedContent(false);
                 config.getGemini().setMaximumTurns(1);
 
@@ -527,7 +529,7 @@ class DefaultReasoningServicePromptFlowTest {
 
                 assertTrue(firstUser.getText().contains("Turn 1/1"));
                 assertTrue(firstUser.getText().contains(
-                                "Respond with a finish-success message requesting the MCP operations needed to complete the task or a finish-error with a message to the user indicating the failure. You should not wait for the results of the MCP operations, the task will be considered complete if all MCP operations succeed."));
+                                "Respond with a finish-success message requesting the tool operations needed to complete the task or a finish-error with a message to the user indicating the failure. You should not wait for the results of the tool operations, the task will be considered complete if all tool operations succeed."));
         }
 
         private MarkdownInferenceRequest runAndCaptureFirstInferRequest(String sourcePath,
@@ -559,6 +561,7 @@ class DefaultReasoningServicePromptFlowTest {
                                 new CompilationTrackingStore());
 
                 ReinsConfig config = new ReinsConfig();
+                config.setProvider("gemini");
                 config.getContext().setCachedContent(cachedContentEnabled);
 
                 ReasoningRequest request = new ReasoningRequest();

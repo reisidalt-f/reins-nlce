@@ -136,6 +136,8 @@ public class DefaultLlmService implements LlmService {
                     adapterResponse.getContent(),
                     providerMetadata);
             lifecycleLogger.logSuccess(request.getRequestId(), providerId);
+            br.com.dizeno.reins.reasoning.inference.llm.logging.ModelRequestResponseLogger.log(
+                    request, normalized.getContent(), config);
             return normalized;
         } catch (Throwable throwable) {
             LlmError error = errorMapper.map(throwable, providerId);

@@ -24,7 +24,7 @@ public class PipelineExchangeMessage {
     private final String contentType;
     private final Map<String, String> headers;
     private final String body;
-    private final String messageToGemini;
+    private final String messageToModel;
     private final String messageToUser;
     private final boolean valid;
     private final String failureReason;
@@ -36,7 +36,7 @@ public class PipelineExchangeMessage {
      * @param contentType the content type
      * @param headers the headers
      * @param body the body
-     * @param messageToGemini the message to gemini
+     * @param messageToModel the message to model
      * @param messageToUser the message to user
      * @param valid the valid
      * @param failureReason the failure reason
@@ -45,7 +45,7 @@ public class PipelineExchangeMessage {
                                    String contentType,
                                    Map<String, String> headers,
                                    String body,
-                                   String messageToGemini,
+                                   String messageToModel,
                                    String messageToUser,
                                    boolean valid,
                                    String failureReason) {
@@ -53,7 +53,7 @@ public class PipelineExchangeMessage {
         this.contentType = contentType;
         this.headers = headers == null ? Collections.emptyMap() : Collections.unmodifiableMap(new LinkedHashMap<>(headers));
         this.body = body;
-        this.messageToGemini = messageToGemini;
+        this.messageToModel = messageToModel;
         this.messageToUser = messageToUser;
         this.valid = valid;
         this.failureReason = failureReason;
@@ -107,12 +107,12 @@ public class PipelineExchangeMessage {
     }
 
     /**
-     * Gets the message to gemini.
+     * Gets the message to model.
      *
      * @return the string result
      */
-    public String getMessageToGemini() {
-        return messageToGemini;
+    public String getMessageToModel() {
+        return messageToModel;
     }
 
     /**
@@ -206,7 +206,7 @@ public class PipelineExchangeMessage {
                 contentType,
                 updatedHeaders,
                 body,
-                messageToGemini,
+                messageToModel,
                 messageToUser,
                 valid,
                 failureReason);

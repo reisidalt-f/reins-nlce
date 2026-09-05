@@ -36,10 +36,7 @@ class ScriptRegistryTest {
         assertTrue(registry.getValidationErrors().isEmpty());
         assertEquals(11, registry.getAllScripts().size());
         assertEquals(10, ScriptRegistry.requiredScriptsForCycle(false).size());
-        assertEquals(4, ScriptRegistry.requiredScriptsForCycle(true).size());
         assertTrue(ScriptRegistry.requiredScriptsForCycle(false).containsKey("phase-list.ftl"));
-        assertFalse(ScriptRegistry.requiredScriptsForCycle(false).containsKey("source-base-phase-list.ftl"));
-        assertTrue(ScriptRegistry.requiredScriptsForCycle(true).containsKey("source-base-phase-list.ftl"));
         assertNotNull(registry.getScript("system-context.ftl"));
     }
 

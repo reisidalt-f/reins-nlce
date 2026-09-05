@@ -23,7 +23,7 @@ import br.com.dizeno.reins.source.graph.ReferenceResolverPipeline;
 import br.com.dizeno.reins.source.graph.RelativeReferenceResolutionStrategy;
 import br.com.dizeno.reins.source.graph.ResolutionResult;
 import br.com.dizeno.reins.source.graph.ResolverContext;
-import br.com.dizeno.reins.source.graph.TestToMainFallbackResolutionStrategy;
+
 import br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver;
 import br.com.dizeno.reins.security.PathValidator;
 
@@ -52,8 +52,10 @@ public class ReferenceTreeContextService {
      */
     public ReferenceTreeContextService() {
         this(new MarkdownReferenceExtractor(), new ReferenceResolverPipeline(List.of(
+                new br.com.dizeno.reins.source.graph.NamedBaseReferenceResolutionStrategy(),
+                new br.com.dizeno.reins.source.graph.RootBaseReferenceResolutionStrategy(),
                 new RelativeReferenceResolutionStrategy(),
-                new TestToMainFallbackResolutionStrategy()
+                new br.com.dizeno.reins.source.graph.ContextualFallbackReferenceResolutionStrategy()
         )));
     }
 
@@ -154,8 +156,9 @@ public class ReferenceTreeContextService {
         List<String> refs = referenceExtractor.extract(content);
         ResolverContext resolverContext = new ResolverContext(
                 ctx.projectRoot(),
-                ctx.projectRoot().resolve(ProjectDirectoryPaths.MAIN_NL_ROOT).normalize(),
-                List.of("relative", "test-to-main-fallback"),
+                Map.of("main", ctx.projectRoot().resolve(ProjectDirectoryPaths.MAIN_NL_ROOT).normalize(),
+                       "test", ctx.projectRoot().resolve(ProjectDirectoryPaths.TEST_NL_ROOT).normalize()),
+                List.of("named-base-scheme", "root-base-relative", "relative", "contextual-fallback"),
                 ctx.validator(),
                 ctx.knownByAbsolute()
         );
@@ -308,10 +311,10 @@ public class ReferenceTreeContextService {
         if (request != null && request.getReferenceDepthPolicy() != null) {
             return request.getReferenceDepthPolicy();
         }
-        if (config == null || config.getContext() == null) {
+        if (config == null || config.getContext() == null || config.getContext().getReferencesTree() == null) {
             return ReferenceDepthPolicy.defaultPolicy();
         }
-        return config.getContext().resolveReferenceDepthPolicy();
+        return config.getContext().getReferencesTree().resolveReferenceDepthPolicy();
     }
 
     private String toCanonicalDisplayLabel(Path rootAbsolute, BasePathResolver resolver, String fallback) {

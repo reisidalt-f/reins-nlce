@@ -140,12 +140,11 @@ public class OllamaProviderAdapter implements ProviderAdapter {
                 settings.getOptions()
         );
 
-        String raw;
-        if (request.getConversationHistory() != null && !request.getConversationHistory().isEmpty()) {
-            raw = ollamaClient.compileChat(params, request.getConversationHistory());
-        } else {
-            raw = ollamaClient.compile(params, request.getMarkdownContent());
+        List<ConversationMessage> history = request.getConversationHistory();
+        if (history == null || history.isEmpty()) {
+            throw new IllegalArgumentException("Conversation history is required for Ollama provider invocation");
         }
+        String raw = ollamaClient.compileChat(params, history);
 
         LlmResponse response = new LlmResponse();
         response.setRequestId(request.getRequestId());

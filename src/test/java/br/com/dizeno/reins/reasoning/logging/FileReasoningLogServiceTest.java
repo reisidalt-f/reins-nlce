@@ -63,8 +63,20 @@ public class FileReasoningLogServiceTest {
 
         
         String filename = cycleLog.getFileNameTimestamp();
-        assertTrue(filename.matches("\\d{8}-\\d{6}"), 
-                "Filename should match yyyyMMdd-HHmmss format");
+        assertTrue(filename.matches("\\d{8}-\\d{6}-request\\.md"), 
+                "Filename should match yyyyMMdd-HHmmss-request.md format");
+    }
+
+    @Test
+    void testInitializeCycleLogWithSourcePath() throws Exception {
+        Path projectRoot = tempDir;
+
+        ReasoningCycleLog cycleLog = logService.initializeCycleLog("cycle-1", projectRoot, "src/main/nl/domain/entities.md");
+
+        String filename = cycleLog.getFileNameTimestamp();
+        assertTrue(filename.matches("\\d{8}-\\d{6}-entities\\.md"), 
+                "Filename should match yyyyMMdd-HHmmss-entities.md format");
+        assertTrue(cycleLog.getLogFilePath().getFileName().toString().matches("\\d{8}-\\d{6}-entities\\.md\\.log"));
     }
 
     @Test
@@ -162,7 +174,7 @@ public class FileReasoningLogServiceTest {
         // 2. Create matching log file ahead of time
         String currentTimestamp = java.time.LocalDateTime.now(java.time.ZoneId.systemDefault())
                 .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
-        Path existingFile = logsDir.resolve(currentTimestamp + ".log");
+        Path existingFile = logsDir.resolve(currentTimestamp + "-request.md.log");
         Files.createFile(existingFile);
 
         // 3. Trigger initializeCycleLog (should collide and wait)
@@ -171,7 +183,7 @@ public class FileReasoningLogServiceTest {
         long endTime = System.currentTimeMillis();
 
         // 4. Assert wait and timestamp difference
-        assertNotEquals(currentTimestamp, cycleLog.getFileNameTimestamp());
+        assertNotEquals(currentTimestamp + "-request.md", cycleLog.getFileNameTimestamp());
         assertTrue(endTime - startTime >= 1000, "Should have waited at least 1 second for collision");
     }
 

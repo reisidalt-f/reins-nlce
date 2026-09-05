@@ -49,6 +49,9 @@ public class CleanMojo extends AbstractMojo {
     @Parameter(property = "skipReins")
     private String skipReins;
 
+    @Parameter(property = "source")
+    private String source;
+
     /**
      * Executes the operation.
      *
@@ -69,6 +72,10 @@ public class CleanMojo extends AbstractMojo {
             config.setVerbose(verbose);
             config.setDryRun(dryRun);
             config.setFailOnError(failOnError);
+            if (source != null && !source.isBlank()) {
+                config.setSource(source);
+                config.setExplicitSourceMode(true);
+            }
 
             new br.com.dizeno.reins.run.ReinsRunner().clean(config, project.getBasedir(), getLog());
         } catch (RuntimeException e) {

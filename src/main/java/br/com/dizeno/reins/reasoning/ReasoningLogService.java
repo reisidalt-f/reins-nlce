@@ -30,6 +30,18 @@ public interface ReasoningLogService {
      */
     ReasoningCycleLog initializeCycleLog(String cycleId, Path projectRoot) throws Exception;
 
+    /**
+     * Initializes the component cycle log with source path.
+     *
+     * @param cycleId the cycle id
+     * @param projectRoot the root path of the project
+     * @param sourcePath the current compilation source path
+     * @return the resolved or constructed object
+     */
+    default ReasoningCycleLog initializeCycleLog(String cycleId, Path projectRoot, String sourcePath) throws Exception {
+        return initializeCycleLog(cycleId, projectRoot);
+    }
+
      
     /**
      * Write Entry.

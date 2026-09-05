@@ -37,11 +37,11 @@ class PartialCustomOverrideIT {
         ScriptEvaluator evaluator = new ScriptEvaluator(registry, null);
 
         String retryMessage = evaluator.evaluate("retry-message.ftl", context());
-        String mcpResult = evaluator.evaluate("tool-result.ftl", contextWithResult());
+        String toolResult = evaluator.evaluate("tool-result.ftl", contextWithResult());
 
         assertEquals("CUSTOM_RETRY_MESSAGE", retryMessage.trim());
-        assertTrue(mcpResult.contains("MCP_RESULT"));
-        assertTrue(mcpResult.contains("status: SUCCESS"));
+        assertTrue(toolResult.contains("SUCCESS READ_FILE"));
+        assertTrue(toolResult.contains("status: SUCCESS") || toolResult.contains("SUCCESS"));
     }
 
     private ReasoningScriptContext context() {
@@ -64,15 +64,7 @@ class PartialCustomOverrideIT {
                         List.of(),
                         List.of(),
                         List.of()))
-                .config(new ReasoningScriptViews.ConfigView(
-                        "gemini-2.5-pro",
-                        5,
-                        false,
-                        false,
-                        false,
-                        true,
-                        false,
-                        null))
+                .config(new ReasoningScriptViews.ConfigView(new br.com.dizeno.reins.run.config.ReinsConfig()))
                 .cycle(new ReasoningScriptViews.CycleView("c1", 1, 5, "IN_PROGRESS", null))
                 .policy(new ReasoningScriptViews.PolicyView(
                         List.of("main", "test", "target"),

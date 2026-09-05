@@ -17,11 +17,11 @@ import br.com.dizeno.reins.run.config.settings.*;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
- 
 /**
  * FilePolicy is part of the general application functions in the reins architecture.
  * Acts as a component managing file policy.
@@ -46,7 +46,11 @@ public class FilePolicy {
         READ("read"),
         WRITE("write"),
         PATCH("patch"),
-        DELETE("delete");
+        DELETE("delete"),
+        APPEND("append"),
+        PREPEND("prepend"),
+        MOVE("move"),
+        COPY("copy");
 
         private final String value;
 
@@ -73,7 +77,7 @@ public class FilePolicy {
             if (token == null || token.isBlank()) {
                 return null;
             }
-            String normalizedToken = token.trim().toLowerCase();
+            String normalizedToken = token.trim().toLowerCase(Locale.ROOT);
             for (OperationToken t : OperationToken.values()) {
                 if (t.value.equals(normalizedToken)) {
                     return t;
@@ -83,9 +87,9 @@ public class FilePolicy {
         }
     }
 
-    private final Map<Base, Set<OperationToken>> permissionsByBase;
+    private final Map<String, Set<OperationToken>> permissionsByBase;
+    private boolean addReasoningNotes;
 
-     
     /**
      * Constructs a new instance of {@link FilePolicy}.
      *
@@ -93,40 +97,80 @@ public class FilePolicy {
      */
     public FilePolicy(ToolingSettings settings) {
         this.permissionsByBase = new HashMap<>();
-        permissionsByBase.put(Base.MAIN, parseTokens(settings.getMain()));
-        permissionsByBase.put(Base.TEST, parseTokens(settings.getTest()));
-        permissionsByBase.put(Base.TARGET, parseTokens(settings.getTarget()));
-
-        
-        permissionsByBase.get(Base.TARGET).add(OperationToken.WRITE);
+        this.addReasoningNotes = settings != null && settings.isAddReasoningNotes();
+        if (settings != null && settings.getBases() != null) {
+            for (Map.Entry<String, String> entry : settings.getBases().entrySet()) {
+                if (entry.getKey() != null) {
+                    permissionsByBase.put(entry.getKey().toLowerCase(Locale.ROOT), parseTokens(entry.getValue()));
+                }
+            }
+        }
+        if (!permissionsByBase.containsKey("main")) {
+            permissionsByBase.put("main", parseTokens(settings != null ? settings.getMain() : null));
+        }
+        if (!permissionsByBase.containsKey("test")) {
+            permissionsByBase.put("test", parseTokens(settings != null ? settings.getTest() : null));
+        }
+        if (!permissionsByBase.containsKey("target")) {
+            permissionsByBase.put("target", parseTokens(settings != null ? settings.getTarget() : null));
+        }
     }
 
-     
     /**
      * Constructs a new instance of {@link FilePolicy}.
      *
      * @param permissionsByBase the permissions by base
      */
     public FilePolicy(Map<Base, Set<OperationToken>> permissionsByBase) {
-        this.permissionsByBase = new HashMap<>(permissionsByBase);
+        this(permissionsByBase, true);
     }
 
-     
+    /**
+     * Constructs a new instance of {@link FilePolicy}.
+     *
+     * @param permissionsByBase the permissions by base
+     * @param addReasoningNotes whether reasoning notes operations are permitted
+     */
+    public FilePolicy(Map<Base, Set<OperationToken>> permissionsByBase, boolean addReasoningNotes) {
+        this.permissionsByBase = new HashMap<>();
+        this.addReasoningNotes = addReasoningNotes;
+        if (permissionsByBase != null) {
+            for (Map.Entry<Base, Set<OperationToken>> entry : permissionsByBase.entrySet()) {
+                if (entry.getKey() != null) {
+                    this.permissionsByBase.put(entry.getKey().name().toLowerCase(Locale.ROOT), new HashSet<>(entry.getValue()));
+                }
+            }
+        }
+    }
+
     /**
      * All Permissive.
      *
      * @return the resolved or constructed object
      */
     public static FilePolicy allPermissive() {
-        Map<Base, Set<OperationToken>> map = new HashMap<>();
+        Map<String, Set<OperationToken>> map = new HashMap<>();
         Set<OperationToken> all = new HashSet<>(Set.of(OperationToken.values()));
         for (Base base : Base.values()) {
-            map.put(base, new HashSet<>(all));
+            map.put(base.name().toLowerCase(Locale.ROOT), new HashSet<>(all));
         }
-        return new FilePolicy(map);
+        FilePolicy policy = new FilePolicy(ToolingSettings.class.cast(null));
+        policy.addReasoningNotes = true;
+        for (Map.Entry<String, Set<OperationToken>> entry : map.entrySet()) {
+            policy.permissionsByBase.put(entry.getKey(), entry.getValue());
+        }
+        return policy;
     }
 
-     
+    /**
+     * Checks if reasoning notes operations are allowed.
+     *
+     * @return true if reasoning notes operations are enabled, false otherwise
+     */
+    public boolean isAddReasoningNotes() {
+        return addReasoningNotes;
+    }
+
     private static Set<OperationToken> parseTokens(String tokenString) {
         if (tokenString == null || tokenString.isBlank()) {
             return new HashSet<>();
@@ -143,7 +187,7 @@ public class FilePolicy {
             if (token == null) {
                 throw new IllegalArgumentException(
                     "Unrecognized tool operation token: '" + part + "'. " +
-                    "Recognized tokens: list, list_compiled, read, write, patch, delete"
+                    "Recognized tokens: list, list_compiled, read, write, patch, delete, append, prepend, move, copy"
                 );
             }
             result.add(token);
@@ -152,35 +196,49 @@ public class FilePolicy {
         return result;
     }
 
-     
     /**
-     * Checks if the component is operation allowed.
+     * Checks if the component is operation allowed for enum Base.
      *
      * @param operation the operation
      * @param base the base
      * @return true if successful or matching, false otherwise
      */
     public boolean isOperationAllowed(ToolExecutionType operation, Base base) {
-        if (operation == null || base == null) {
+        if (base == null) {
             return false;
         }
+        return isOperationAllowed(operation, base.name().toLowerCase(Locale.ROOT));
+    }
 
-        
-        if (operation == ToolExecutionType.WRITE_FILE && base == Base.TARGET) {
-            return true;
+    /**
+     * Checks if the component is operation allowed for a base name.
+     *
+     * @param operation the operation
+     * @param base base name
+     * @return true if successful or matching, false otherwise
+     */
+    public boolean isOperationAllowed(ToolExecutionType operation, String base) {
+        if (operation == null || base == null || base.isBlank()) {
+            return false;
         }
+        String normalized = base.trim().toLowerCase(Locale.ROOT);
 
-        
         OperationToken token = operation.getRequiredToken();
         if (token == null) {
             return false;
         }
 
-        
-        return permissionsByBase.get(base).contains(token);
+        Set<OperationToken> tokens = permissionsByBase.get(normalized);
+        if (tokens == null) {
+            return false;
+        }
+        if (tokens.contains(token)) {
+            return true;
+        }
+        return tokens.contains(OperationToken.WRITE) &&
+                (token == OperationToken.APPEND || token == OperationToken.PREPEND || token == OperationToken.MOVE || token == OperationToken.COPY);
     }
 
-     
     /**
      * Gets the enabled bases for operation.
      *
@@ -193,25 +251,53 @@ public class FilePolicy {
         }
 
         Set<Base> enabled = new HashSet<>();
-
         for (Base base : Base.values()) {
             if (isOperationAllowed(operation, base)) {
                 enabled.add(base);
             }
         }
-
         return enabled;
     }
 
-     
     /**
-     * Gets the permissions for base.
+     * Gets all enabled base names for operation.
+     *
+     * @param operation the operation
+     * @return set of base names
+     */
+    public Set<String> getEnabledBaseNamesForOperation(ToolExecutionType operation) {
+        if (operation == null) {
+            return Set.of();
+        }
+        Set<String> enabled = new HashSet<>();
+        for (String base : permissionsByBase.keySet()) {
+            if (isOperationAllowed(operation, base)) {
+                enabled.add(base);
+            }
+        }
+        return enabled;
+    }
+
+    /**
+     * Gets the permissions for enum Base.
      *
      * @param base the base
      * @return the collection of elements
      */
     public Set<OperationToken> getPermissionsForBase(Base base) {
-        return permissionsByBase.getOrDefault(base, Set.of());
+        if (base == null) return Set.of();
+        return getPermissionsForBase(base.name().toLowerCase(Locale.ROOT));
+    }
+
+    /**
+     * Gets the permissions for base name.
+     *
+     * @param base base name
+     * @return set of tokens
+     */
+    public Set<OperationToken> getPermissionsForBase(String base) {
+        if (base == null || base.isBlank()) return Set.of();
+        return permissionsByBase.getOrDefault(base.trim().toLowerCase(Locale.ROOT), Set.of());
     }
 
     /**
@@ -222,17 +308,16 @@ public class FilePolicy {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder(getClass().getName()).append("{");
-        for (Base base : Base.values()) {
-            sb.append(base.name().toLowerCase()).append("=[");
-            Set<OperationToken> tokens = permissionsByBase.get(base);
-            String tokenStr = tokens.stream()
+        boolean first = true;
+        for (Map.Entry<String, Set<OperationToken>> entry : permissionsByBase.entrySet()) {
+            if (!first) sb.append(", ");
+            first = false;
+            sb.append(entry.getKey()).append("=[");
+            String tokenStr = entry.getValue().stream()
                 .map(OperationToken::getValue)
                 .sorted()
                 .collect(Collectors.joining(", "));
             sb.append(tokenStr).append("]");
-            if (!base.equals(Base.TARGET)) {
-                sb.append(", ");
-            }
         }
         sb.append("}");
         return sb.toString();

@@ -86,7 +86,7 @@ public class PipelineOrchestratorService {
                 List.of(),
                 List.of(),
                 List.of(),
-                request != null && request.isProjectInferenceCycle());
+                false);
         String rendered;
         try {
             boolean scriptsEventsEnabled = config != null
@@ -153,7 +153,7 @@ public class PipelineOrchestratorService {
                 inspectedPaths,
                 compiledPaths,
                 attachments,
-                request != null && request.isProjectInferenceCycle());
+                false);
         if (baseContext == null) {
             throw new IllegalStateException("Unable to build script context for inference pipeline plan.");
         }
@@ -188,7 +188,7 @@ public class PipelineOrchestratorService {
     }
 
     /**
-     * Render Pipeline Gemini Message.
+     * Render Pipeline Message To Model.
      *
      * @param currentPhase the current phase
      * @param pipelinePlan the pipeline plan
@@ -212,7 +212,7 @@ public class PipelineOrchestratorService {
      * @param currentToolResult the current tool result
      * @return the string result
      */
-    public String renderPipelineGeminiMessage(String currentPhase,
+    public String renderPipelineMessageToModel(String currentPhase,
                                               ReasoningPipelinePlan pipelinePlan,
                                               int pipelinePhaseIndex,
                                               String messageContext,
@@ -245,7 +245,7 @@ public class PipelineOrchestratorService {
                 inspectedPaths,
                 compiledPaths,
                 attachments,
-                request != null && request.isProjectInferenceCycle());
+                false);
         if (baseContext == null) {
             return null;
         }
@@ -282,7 +282,7 @@ public class PipelineOrchestratorService {
             if (exchangeMessage.isSpoofedAssistantRole()) {
                 return toCanonicalMessage(exchangeMessage);
             }
-            return exchangeMessage.getMessageToGemini();
+            return exchangeMessage.getMessageToModel();
         } catch (ScriptEvaluationException ex) {
             throw new IllegalStateException("Failed to render inference pipeline message.", ex);
         } catch (ScriptEvaluationService.PipelineMessageParseException ex) {

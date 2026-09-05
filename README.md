@@ -18,7 +18,7 @@ Reins compiles natural-language software components source texts directly into e
 The compilation process mirrors traditional compiler phases, powered by a flexible and secure orchestration architecture:
 
 1. **Source Discovery & Scanning:**
-   * **Source Discovery:** Reins scans configured root directories (`scanRoots`) and filters files using configurable include/exclude glob patterns to discover valid natural-language `.md` source files.
+   * **Source Discovery:** Reins scans configured named source base directories (`source.main`, `source.test`, etc.) and filters files using configurable include/exclude glob patterns to discover valid natural-language `.md` source files.
 
 2. **Parsing & Reference Resolution (Markdown Source to Graph):**
    * **Natural-Language Sources:** Treat `.md` files directly as your compilation sources.
@@ -28,7 +28,7 @@ The compilation process mirrors traditional compiler phases, powered by a flexib
    * **Target Architecture:** The engine evaluates dependencies, constraints, and target platform rules (e.g., Assembly, Java, TypeScript, Python conventions) against the source text to ensure the generated code satisfies target specs.
 
 4. **Code Generation & Tool Execution:**
-   * **Provider-Agnostic LLM Abstraction:** The inference pipeline runs on a vendor-neutral LLM client interface with adapters for **Google Gemini** and **Ollama** (with more to come).
+   * **Provider-Agnostic LLM Abstraction:** The inference pipeline runs on a vendor-neutral LLM client interface with adapters for **Google Gemini**, **OpenAI**, and **Ollama** (with more to come).
    * **Scriptable Inference Orchestration:** Compilation prompts and pipeline phases are executed using customizable **Apache FreeMarker templates** (`.ftl`), letting you override prompt patterns, system contexts, and reasoning loops.
    * **Sandboxed File Operations Tooling:** The engine writes fully realized, compile-ready target files through a highly constrained file operations tool layer (`list`, `read`, `write`, `patch`, `delete`, `list_compiled`, `run_script`), restricting execution exclusively to authorized project paths.
 
@@ -101,9 +101,9 @@ src/test/test-projects/notes-manager/
    * **Target Architecture (`compilation/`):** Technology target rules defining language (Java 17), coding standards, and user interfaces. For example, `java-console.md` compiles the code into a command-line interface, while `java-swing.md` compiles it into a graphical Java Swing interface.
 
 2. **Inference & Compiler Configuration (`pom.xml`):**
-   * **Source Discovery (`<scanRoots>` & `<includePattern>`):** Configured to automatically scan `src/main/nl` for all `.md` files matching `**/*.md`.
-   * **Target Outputs (`<target>`):** Compiled `.java` artifacts are written directly to `target/generated-sources/reins/` to align package names with target folder structures.
-   * **Tooling Constraints (`<tooling>`):** Sandboxes file mutations by granting the generation model strict access only to `list`, `read`, `write`, and `delete` tools.
+   * **Source Bases (`<source>` & `<includePattern>`):** Configured to automatically scan `src/main/nl` via `<source><main>...</main></source>` for all `.md` files matching `**/*.md`.
+   * **Target Outputs (`<target>`):** Compiled `.java` artifacts are written directly to `target/generated-sources/reins` via `<target><main>...</main></target>`.
+   * **Tooling Constraints (`<tooling>`):** Sandboxes file mutations by granting the generation model explicit access to specified tools (e.g., `list`, `read`, `write`, `patch`, and `delete`).
    * **Incremental Tracking (`<tracking>`):** control of the compilation and changes tracking system.
    * **Build Integration (`build-helper-maven-plugin`):** Registers the output directory (`target/generated-sources/reins`) as a Java source root, integrating the generated codebase seamlessly into standard compilation phases (like `mvn compile`).
 
@@ -132,8 +132,9 @@ To run the compilation under this configuration, export `OLLAMA_API_KEY`:
 export OLLAMA_API_KEY="your-actual-api-key"
 ```
 
-#### Switching to Gemini or Local Ollama
+#### Switching to Gemini, OpenAI, or Local Ollama
 * **To use Google Gemini:** Change `<provider>gemini</provider>` in `pom.xml`, configure `<gemini><apiKey>${env.GEMINI_API_KEY}</apiKey><model>gemini-2.0-flash</model></gemini>`, and export `GEMINI_API_KEY`.
+* **To use OpenAI:** Change `<provider>openai</provider>` in `pom.xml`, configure `<openai><apiKey>${env.OPENAI_API_KEY}</apiKey><model>gpt-4o</model></openai>`, and export `OPENAI_API_KEY`.
 * **To use local Ollama:** Update `<endpoint>` to `http://localhost:11434` and set `<model>` to your local model (e.g., `llama3` or `codegemma`). Local instances do not require an API key.
 
 ---

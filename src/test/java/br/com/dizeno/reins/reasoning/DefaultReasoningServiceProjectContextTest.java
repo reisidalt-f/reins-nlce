@@ -58,14 +58,15 @@ class DefaultReasoningServiceProjectContextTest {
         ReasoningRequest request = baseRequest(source);
         request.setCompilationBackgroundPayload(payload);
 
-        service.runCycle(request, new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        service.runCycle(request, config);
 
         MarkdownInferenceRequest sent = captureFirstInferRequest(inferenceService);
         List<AttachedFilePayload> attachments = backgroundFilesMessage(sent).getAttachments();
 
-        assertTrue(attachments.size() >= 2, "Expected at least 2 attachments (context + source)");
+        assertTrue(attachments.size() >= 1, "Expected at least 1 background attachment");
         assertEquals("main:project.md", attachments.get(0).getQualifiedPath());
-        assertEquals("main:domain.md", attachments.get(attachments.size() - 1).getQualifiedPath());
     }
 
     @Test
@@ -84,15 +85,16 @@ class DefaultReasoningServiceProjectContextTest {
         ReasoningRequest request = baseRequest(source);
         request.setCompilationBackgroundPayload(payload);
 
-        service.runCycle(request, new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        service.runCycle(request, config);
 
         MarkdownInferenceRequest sent = captureFirstInferRequest(inferenceService);
         List<AttachedFilePayload> attachments = backgroundFilesMessage(sent).getAttachments();
 
-        assertEquals(3, attachments.size());
+        assertEquals(2, attachments.size());
         assertEquals("main:project.md", attachments.get(0).getQualifiedPath());
         assertEquals("main:arch.md", attachments.get(1).getQualifiedPath());
-        assertEquals("main:domain.md", attachments.get(2).getQualifiedPath());
     }
 
     @Test
@@ -109,7 +111,9 @@ class DefaultReasoningServiceProjectContextTest {
         ReasoningRequest request = baseRequest(source);
         request.setCompilationBackgroundPayload(payload);
 
-        service.runCycle(request, new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        service.runCycle(request, config);
 
         MarkdownInferenceRequest sent = captureFirstInferRequest(inferenceService);
         String firstTurnText = firstUserMessage(sent).getText();
@@ -130,13 +134,14 @@ class DefaultReasoningServiceProjectContextTest {
         ReasoningRequest request = baseRequest(source);
         
 
-        service.runCycle(request, new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        service.runCycle(request, config);
 
         MarkdownInferenceRequest sent = captureFirstInferRequest(inferenceService);
         List<AttachedFilePayload> attachments = backgroundFilesMessage(sent).getAttachments();
 
-        assertEquals(1, attachments.size(), "Only source attachment expected when payload is null");
-        assertEquals("main:domain.md", attachments.get(0).getQualifiedPath());
+        assertEquals(0, attachments.size(), "No background attachments expected when payload is null");
     }
 
     @Test
@@ -149,7 +154,9 @@ class DefaultReasoningServiceProjectContextTest {
         ReasoningRequest request = baseRequest(source);
         
 
-        service.runCycle(request, new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        service.runCycle(request, config);
 
         MarkdownInferenceRequest sent = captureFirstInferRequest(inferenceService);
         String firstTurnText = firstUserMessage(sent).getText();
@@ -167,13 +174,14 @@ class DefaultReasoningServiceProjectContextTest {
         ReasoningRequest request = baseRequest(source);
         request.setCompilationBackgroundPayload(CompilationBackgroundPayload.empty());
 
-        service.runCycle(request, new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        service.runCycle(request, config);
 
         MarkdownInferenceRequest sent = captureFirstInferRequest(inferenceService);
         List<AttachedFilePayload> attachments = backgroundFilesMessage(sent).getAttachments();
 
-        assertEquals(1, attachments.size(), "Only source attachment expected when payload is empty");
-        assertEquals("main:domain.md", attachments.get(0).getQualifiedPath());
+        assertEquals(0, attachments.size(), "No background attachments expected when payload is empty");
     }
 
     

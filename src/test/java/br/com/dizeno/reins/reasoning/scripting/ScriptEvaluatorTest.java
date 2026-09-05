@@ -123,7 +123,7 @@ class ScriptEvaluatorTest {
                                                 "custom-phase\n" +
                                                 "<#elseif phase == \"custom-phase\">\n" +
                                                 "INTENT: waiting-for-next-message\n" +
-                                                "CONTENT_TYPE: gemini-message\n" +
+                                                "CONTENT_TYPE: message-to-model\n" +
                                                 "\n" +
                                                 "Custom phase output\n" +
                                                 "</#if>");
@@ -162,6 +162,50 @@ class ScriptEvaluatorTest {
                 assertTrue(disabledOutput
                                 .contains("Group any pending notes by canonical recipient key format `base:path`"));
                 assertFalse(disabledOutput.contains("Use add_reasoning_note to capture corrective context"));
+        }
+
+        @Test
+        void exposesTopLevelContextAliasesAndFileHelpers() throws Exception {
+                Files.writeString(tempDir.resolve("aliases-test.ftl"),
+                                "SCOPE:${source.scope};QUAL:${source.qualifiedPath};HAS_FILE:${hasFile('main:src/main/nl/source.md')?string};DEFAULT:${readFileOrDefault('missing.txt', 'fallback')}");
+
+                ScriptRegistry registry = ScriptRegistry.build(new ScriptResolver(tempDir.toFile(), null));
+                ScriptEvaluator evaluator = new ScriptEvaluator(registry, null);
+
+                String output = evaluator.evaluate("aliases-test.ftl", minimalContext());
+                assertTrue(output.contains("SCOPE:main"));
+                assertTrue(output.contains("QUAL:main:src/main/nl/source.md"));
+                assertTrue(output.contains("HAS_FILE:false"));
+                assertTrue(output.contains("DEFAULT:fallback"));
+        }
+
+        @Test
+        void exposesReinsConfigPropertiesViaConfigView() throws Exception {
+                ReinsConfig config = new ReinsConfig();
+                config.setProvider("gemini");
+                config.setIncludePattern("*.spec.md");
+                config.setSkipTest(true);
+                config.getReasoning().setScriptsPath("custom/scripts/dir");
+                config.getTooling().setAddReasoningNotes(true);
+
+                ReasoningScriptContext context = ReasoningScriptContext.builder()
+                                .source(new ReasoningScriptViews.SourceView("src/spec.md", "/tmp/spec.md", "# spec", "hash", "main", List.of()))
+                                .config(new ReasoningScriptViews.ConfigView(config))
+                                .build();
+
+                Files.writeString(tempDir.resolve("config-test.ftl"),
+                                "PROVIDER:${config.provider};PATTERN:${config.includePattern};SKIP_TEST:${config.skipTest?string};SCRIPTS_PATH:${config.reasoning.scriptsPath};ADD_NOTES:${config.tooling.addReasoningNotes?string};RAW_PROVIDER:${config.raw.provider}");
+
+                ScriptRegistry registry = ScriptRegistry.build(new ScriptResolver(tempDir.toFile(), null));
+                ScriptEvaluator evaluator = new ScriptEvaluator(registry, null);
+
+                String output = evaluator.evaluate("config-test.ftl", context);
+                assertTrue(output.contains("PROVIDER:gemini"));
+                assertTrue(output.contains("PATTERN:*.spec.md"));
+                assertTrue(output.contains("SKIP_TEST:true"));
+                assertTrue(output.contains("SCRIPTS_PATH:custom/scripts/dir"));
+                assertTrue(output.contains("ADD_NOTES:true"));
+                assertTrue(output.contains("RAW_PROVIDER:gemini"));
         }
 
         private ReasoningScriptContext minimalContext() {
@@ -215,16 +259,7 @@ class ScriptEvaluatorTest {
                                                 List.of(),
                                                 List.of(),
                                                 List.of()))
-                                .config(new ReasoningScriptViews.ConfigView(
-                                                "gemini-2.5-pro",
-                                                5,
-                                                true,
-                                                false,
-                                                false,
-                                                true,
-                                                false,
-                                                addReasoningNotesEnabled,
-                                                null))
+                                .config(new ReasoningScriptViews.ConfigView(config))
                                 .cycle(new ReasoningScriptViews.CycleView("cycle-1", 1, 5, "IN_PROGRESS", null))
                                 .policy(new ReasoningScriptViews.PolicyView(
                                                 List.of("main", "test"),
@@ -243,7 +278,7 @@ class ScriptEvaluatorTest {
                                                 List.of("default-cycle"),
                                                 "COMPILE",
                                                 "continue",
-                                                "gemini-message",
+                                                "message-to-model",
                                                 "previous cycle",
                                                 null,
                                                 false))

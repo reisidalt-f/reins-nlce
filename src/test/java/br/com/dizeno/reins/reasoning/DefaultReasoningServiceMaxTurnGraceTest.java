@@ -43,8 +43,8 @@ class DefaultReasoningServiceMaxTurnGraceTest {
     private InferenceService inferenceService;
     private ResponseDirectiveParser directiveParser;
     private ReasoningPromptBuilder promptBuilder;
-    private br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService;
-    private ToolResultFormatter mcpResultFormatter;
+    private br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService;
+    private ToolResultFormatter toolResultFormatter;
     private DefaultReasoningService service;
 
     @TempDir
@@ -55,15 +55,15 @@ class DefaultReasoningServiceMaxTurnGraceTest {
         inferenceService = mock(InferenceService.class);
         directiveParser = mock(ResponseDirectiveParser.class);
         promptBuilder = mock(ReasoningPromptBuilder.class);
-        mcpService = mock(br.com.dizeno.reins.reasoning.tooling.ToolingService.class);
-        mcpResultFormatter = mock(ToolResultFormatter.class);
+        toolingService = mock(br.com.dizeno.reins.reasoning.tooling.ToolingService.class);
+        toolResultFormatter = mock(ToolResultFormatter.class);
 
         service = new DefaultReasoningService(
                 inferenceService,
                 directiveParser,
                 promptBuilder,
-                mcpService,
-                mcpResultFormatter,
+                toolingService,
+                toolResultFormatter,
                 new FileReasoningLogService(),
                 new CompilationTrackingStore()
         );
@@ -78,7 +78,7 @@ class DefaultReasoningServiceMaxTurnGraceTest {
         when(inferenceService.infer(any(), any())).thenReturn(first, second);
 
         when(promptBuilder.buildPrompt(any(), any(), any(), anyBoolean())).thenReturn("prompt");
-        when(mcpResultFormatter.format(any())).thenReturn("mcp-result");
+        when(toolResultFormatter.format(any())).thenReturn("tool-result");
 
         ResponseDirective wait = new ResponseDirective();
         wait.setValid(true);
@@ -97,7 +97,7 @@ class DefaultReasoningServiceMaxTurnGraceTest {
                 new ResponseDirectiveParser.ParseResult(stillWaiting, "Still investigating")
         );
 
-        when(mcpService.execute(any(), any(), any(), any())).thenReturn(
+        when(toolingService.execute(any(), any(), any(), any())).thenReturn(
                 br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.success(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.LIST_FILES, "main:/", "ok")
         );
 
@@ -119,7 +119,7 @@ class DefaultReasoningServiceMaxTurnGraceTest {
         when(inferenceService.infer(any(), any())).thenReturn(first, second);
 
         when(promptBuilder.buildPrompt(any(), any(), any(), anyBoolean())).thenReturn("prompt");
-        when(mcpResultFormatter.format(any())).thenReturn("mcp-result");
+        when(toolResultFormatter.format(any())).thenReturn("tool-result");
 
         ResponseDirective wait = new ResponseDirective();
         wait.setValid(true);
@@ -138,7 +138,7 @@ class DefaultReasoningServiceMaxTurnGraceTest {
                 new ResponseDirectiveParser.ParseResult(finishError, "Could not conclude after max turns")
         );
 
-        when(mcpService.execute(any(), any(), any(), any())).thenReturn(
+        when(toolingService.execute(any(), any(), any(), any())).thenReturn(
                 br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.success(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.LIST_FILES, "main:/", "ok")
         );
 
@@ -161,13 +161,13 @@ class DefaultReasoningServiceMaxTurnGraceTest {
                 .orElseThrow();
 
         assertTrue(graceTurnUserMessage.getText().contains("Turn 2/1"));
-        assertTrue(graceTurnUserMessage.getText().contains("Respond with a finish-success message requesting the MCP operations needed to complete the task or a finish-error with a message to the user indicating the failure. You should not wait for the results of the MCP operations, the task will be considered complete if all MCP operations succeed."));
+        assertTrue(graceTurnUserMessage.getText().contains("Respond with a finish-success message requesting the tool operations needed to complete the task or a finish-error with a message to the user indicating the failure. You should not wait for the results of the tool operations, the task will be considered complete if all tool operations succeed."));
     }
 
     @Test
     void compileLikeScriptFailure_doesNotBlockNextMutationRequest() throws Exception {
         InferenceService inferenceService = mock(InferenceService.class);
-        br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService = mock(br.com.dizeno.reins.reasoning.tooling.ToolingService.class);
+        br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService = mock(br.com.dizeno.reins.reasoning.tooling.ToolingService.class);
 
         MarkdownInferenceResponse turn1 = mock(MarkdownInferenceResponse.class);
         MarkdownInferenceResponse turn2 = mock(MarkdownInferenceResponse.class);
@@ -175,42 +175,41 @@ class DefaultReasoningServiceMaxTurnGraceTest {
         when(turn1.getRawResponseText()).thenReturn(
                 "INTENT: waiting-for-next-message\nCONTENT_TYPE: tool-request\n\n"
                         + "operation: run_script\n"
-                        + "script: compile-one-java.sh\n"
+                        + "script: run-build.sh\n"
                         + "args: [\"com/example/Broken.java\"]\n");
         when(turn2.getRawResponseText()).thenReturn(
                 "INTENT: waiting-for-next-message\nCONTENT_TYPE: tool-request\n\n"
                         + "operation: patch_file\n"
                         + "base: target\n"
                         + "path: main/java/com/example/Broken.java\n"
-                        + "atLine: 1\n"
-                        + "replacing: 0\n"
-                        + "content: \"package com.example;\\n\"\n");
+                        + "content: \"@@ -1 +1 @@\\n-old\\n+package com.example;\\n\"\n");
         when(turn3.getRawResponseText()).thenReturn(
                 "INTENT: finish-success\nCONTENT_TYPE: message-to-user\n\nDone\n");
         when(inferenceService.infer(any(), any())).thenReturn(turn1, turn2, turn3);
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult compileError = br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.error(
                 br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.RUN_SCRIPT,
-                "script:compile-one-java.sh",
+                "script:run-build.sh",
                 "compile failed");
         compileError.setStdout("target/main/java/com/example/Broken.java:[12,8] cannot find symbol\n");
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult patchSuccess = br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.success(
                 br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.PATCH_FILE,
                 "target:main/java/com/example/Broken.java",
                 "patched");
-        when(mcpService.execute(any(), any(), any(), any())).thenReturn(compileError, patchSuccess);
+        when(toolingService.execute(any(), any(), any(), any())).thenReturn(compileError, patchSuccess);
 
         DefaultReasoningService localService = new DefaultReasoningService(
                 inferenceService,
                 new ResponseDirectiveParser(),
                 new ReasoningPromptBuilder(),
-                mcpService,
+                toolingService,
                 new ToolResultFormatter(),
                 new FileReasoningLogService(),
                 new CompilationTrackingStore()
         );
 
         ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
         config.getGemini().setMaximumTurns(2);
 
         ReasoningRequest request = new ReasoningRequest();
@@ -227,7 +226,7 @@ class DefaultReasoningServiceMaxTurnGraceTest {
 
         assertEquals("finish_success", result.getFinalIntent());
         verify(inferenceService, times(3)).infer(any(), any());
-        verify(mcpService, times(2)).execute(any(), any(), any(), any());
+        verify(toolingService, times(2)).execute(any(), any(), any(), any());
     }
 
     private ReasoningRequest buildRequest() {
@@ -244,7 +243,8 @@ class DefaultReasoningServiceMaxTurnGraceTest {
 
     private ReinsConfig configWithMaxTurns(int maxTurns) {
         ReinsConfig config = new ReinsConfig();
-                config.getGemini().setMaximumTurns(maxTurns);
+        config.setProvider("gemini");
+        config.getGemini().setMaximumTurns(maxTurns);
         return config;
     }
 }

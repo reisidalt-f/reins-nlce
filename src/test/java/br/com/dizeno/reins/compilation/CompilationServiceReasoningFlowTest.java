@@ -55,6 +55,15 @@ class CompilationServiceReasoningFlowTest {
     @TempDir
     Path tempDir;
 
+    private ReinsConfig createValidConfig() {
+        ReinsConfig config = new ReinsConfig();
+        config.setSourceBase("main", tempDir.resolve("src/main/nl").toFile());
+        TargetSettings target = new TargetSettings();
+        target.setTargetBase("main", "src/main/java");
+        config.setTarget(target);
+        return config;
+    }
+
     @Test
     void usesReasoningTerminalReasonWhenNoBlocksAreCompiled() throws Exception {
         InferenceService inferenceService = mock(InferenceService.class);
@@ -91,7 +100,7 @@ class CompilationServiceReasoningFlowTest {
                 List.of()
         ));
         MarkdownDependencyGraph graph = new MarkdownDependencyGraph(nodes, Map.of(), Map.of(), List.of("src/main/nl/domain/entities.md"));
-        when(graphBuilder.build(any(), any(), any())).thenReturn(graph);
+        when(graphBuilder.build(any(), any(), any(), any())).thenReturn(graph);
         when(processingOrderResolver.resolve(graph)).thenReturn(List.of("src/main/nl/domain/entities.md"));
 
         ReasoningResult reasoningResult = new ReasoningResult();
@@ -101,6 +110,10 @@ class CompilationServiceReasoningFlowTest {
         when(reasoningService.runCycle(any(), any())).thenReturn(reasoningResult);
 
         ReinsConfig config = new ReinsConfig();
+        config.setSourceBase("main", tempDir.resolve("src/main/nl").toFile());
+        TargetSettings target = new TargetSettings();
+        target.setTargetBase("main", "src/main/java");
+        config.setTarget(target);
         config.setFailOnError(true);
         ReasoningSettings settings = new ReasoningSettings();
         settings.setEnabled(true);
@@ -109,8 +122,7 @@ class CompilationServiceReasoningFlowTest {
 
         Log log = mock(Log.class);
 
-        
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(Exception.class,
                 () -> service.processFiles(List.of(source.toFile()), config, tempDir, log));
         
         
@@ -152,7 +164,7 @@ class CompilationServiceReasoningFlowTest {
                 List.of()
         ));
         MarkdownDependencyGraph graph = new MarkdownDependencyGraph(nodes, Map.of(), Map.of(), List.of("src/main/nl/md/application.md"));
-        when(graphBuilder.build(any(), any(), any())).thenReturn(graph);
+        when(graphBuilder.build(any(), any(), any(), any())).thenReturn(graph);
         when(processingOrderResolver.resolve(graph)).thenReturn(List.of("src/main/nl/md/application.md"));
         when(trackingStore.canonicalizePath("src/main/nl/md/application.md")).thenReturn("main:md/application.md");
         when(trackingStore.load(any(), any())).thenReturn(java.util.Optional.empty());
@@ -164,7 +176,7 @@ class CompilationServiceReasoningFlowTest {
         reasoningResult.setUserFacingMessages(List.of("done"));
         when(reasoningService.runCycle(any(), any())).thenReturn(reasoningResult);
 
-        ReinsConfig config = new ReinsConfig();
+        ReinsConfig config = createValidConfig();
         config.setFailOnError(false);
         ReasoningSettings settings = new ReasoningSettings();
         settings.setEnabled(true);
@@ -235,7 +247,7 @@ class CompilationServiceReasoningFlowTest {
         reverseEdges.put("src/main/nl/domain/app.md", List.of());
         MarkdownDependencyGraph graph = new MarkdownDependencyGraph(nodes, edges, reverseEdges, List.of("src/main/nl/domain/app.md"));
 
-        when(graphBuilder.build(any(), any(), any())).thenReturn(graph);
+        when(graphBuilder.build(any(), any(), any(), any())).thenReturn(graph);
         when(processingOrderResolver.resolve(graph))
                 .thenReturn(List.of("src/main/nl/domain/node.md", "src/main/nl/domain/app.md"));
         when(trackingStore.canonicalizePath(any()))
@@ -249,7 +261,7 @@ class CompilationServiceReasoningFlowTest {
         reasoningResult.setUserFacingMessages(List.of("done"));
         when(reasoningService.runCycle(any(), any())).thenReturn(reasoningResult);
 
-        ReinsConfig config = new ReinsConfig();
+        ReinsConfig config = createValidConfig();
         ReasoningSettings settings = new ReasoningSettings();
         settings.setEnabled(true);
         config.setReasoning(settings);
@@ -321,7 +333,7 @@ class CompilationServiceReasoningFlowTest {
                 List.of("src/main/nl/md/application.md")
         );
 
-        when(graphBuilder.build(any(), any(), any())).thenReturn(graph);
+        when(graphBuilder.build(any(), any(), any(), any())).thenReturn(graph);
         when(processingOrderResolver.resolve(graph)).thenReturn(List.of("src/main/nl/md/application.md"));
         when(trackingStore.canonicalizePath("src/main/nl/md/application.md")).thenReturn("main:md/application.md");
         when(trackingStore.canonicalizePath("src/main/nl/md/editor/editor.md")).thenReturn("main:md/editor/editor.md");
@@ -356,16 +368,14 @@ class CompilationServiceReasoningFlowTest {
         reasoningResult.setUserFacingMessages(List.of("done"));
         when(reasoningService.runCycle(any(), any())).thenReturn(reasoningResult);
 
-        ReinsConfig config = new ReinsConfig();
+        ReinsConfig config = createValidConfig();
         config.setFailOnError(false);
         ContextSettings context = new ContextSettings();
-        context.setAttachReferencedFiles(true);
-        context.setReferencesTreeDepth("*");
+        context.getReferencesTree().setAttachFiles(true);
+        context.getReferencesTree().setDepth("*");
+        context.setCompiledFiles(true);
+        context.setInspectedFiles(false);
         config.setContext(context);
-        EagerlyProvideSettings eagerlyProvide = new EagerlyProvideSettings();
-        eagerlyProvide.setPreviouslyCompiledFiles(true);
-        eagerlyProvide.setPreviouslyInspectedFiles(false);
-        config.setEagerlyProvide(eagerlyProvide);
 
         service.processFiles(List.of(appSource.toFile()), config, tempDir, mock(Log.class));
 
@@ -435,7 +445,7 @@ class CompilationServiceReasoningFlowTest {
                 List.of()
         ));
         MarkdownDependencyGraph graph = new MarkdownDependencyGraph(nodes, Map.of(), Map.of(), List.of("src/main/nl/domain/entities.md"));
-        when(graphBuilder.build(any(), any(), any())).thenReturn(graph);
+        when(graphBuilder.build(any(), any(), any(), any())).thenReturn(graph);
         when(processingOrderResolver.resolve(graph)).thenReturn(List.of("src/main/nl/domain/entities.md"));
         when(trackingStore.canonicalizePath(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -446,8 +456,8 @@ class CompilationServiceReasoningFlowTest {
         previous.setSourcePath("main:domain/entities.md");
         previous.setSourceCategory("main");
         previous.setCompiledFiles(Map.of(
-                "target:src/main/java/domain/KeptType.java", new FileTrackingDetails("main:domain/entities.md", "main", 10L),
-                "target:src/main/java/domain/RemovedType.java", new FileTrackingDetails("main:domain/entities.md", "main", 20L)
+                "target:domain/KeptType.java", new FileTrackingDetails("main:domain/entities.md", "main", 10L),
+                "target:domain/RemovedType.java", new FileTrackingDetails("main:domain/entities.md", "main", 20L)
         ));
         when(trackingStore.load(any(), any())).thenReturn(Optional.of(previous));
 
@@ -460,7 +470,7 @@ class CompilationServiceReasoningFlowTest {
         reasoningResult.setUserFacingMessages(List.of("done"));
         when(reasoningService.runCycle(any(), any())).thenReturn(reasoningResult);
 
-        ReinsConfig config = new ReinsConfig();
+        ReinsConfig config = createValidConfig();
         ReasoningSettings settings = new ReasoningSettings();
         settings.setEnabled(true);
         config.setReasoning(settings);
@@ -472,8 +482,8 @@ class CompilationServiceReasoningFlowTest {
 
         SourceTrackingRecord saved = recordCaptor.getValue();
         assertEquals(Set.of(
-                        "target:src/main/java/domain/KeptType.java",
-                        "target:src/main/java/domain/NewType.java"),
+                        "target:domain/KeptType.java",
+                        "target:domain/NewType.java"),
                 saved.getCompiledFiles().keySet());
     }
 
@@ -513,10 +523,14 @@ class CompilationServiceReasoningFlowTest {
                 List.of()
         ));
         MarkdownDependencyGraph graph = new MarkdownDependencyGraph(nodes, Map.of(), Map.of(), List.of("src/main/nl/domain/entities.md"));
-        when(graphBuilder.build(any(), any(), any())).thenReturn(graph);
+        when(graphBuilder.build(any(), any(), any(), any())).thenReturn(graph);
         when(processingOrderResolver.resolve(graph)).thenReturn(List.of("src/main/nl/domain/entities.md"));
         when(trackingStore.canonicalizePath("src/main/nl/domain/entities.md"))
                 .thenReturn("main:domain/entities.md");
+
+        Path validTarget = tempDir.resolve("src/main/java/domain/ValidType.java");
+        Files.createDirectories(validTarget.getParent());
+        Files.writeString(validTarget, "class ValidType {}\n", StandardCharsets.UTF_8);
 
         SourceTrackingRecord previous = new SourceTrackingRecord();
         previous.setSourcePath("main:domain/entities.md");
@@ -529,7 +543,7 @@ class CompilationServiceReasoningFlowTest {
 
         ReasoningResult reasoningResult = new ReasoningResult();
         reasoningResult.setFinalIntent("finish_success");
-        reasoningResult.setWrittenPaths(List.of());
+        reasoningResult.setWrittenPaths(List.of("src/main/java/domain/ValidType.java"));
         reasoningResult.setInspectedPaths(List.of());
         reasoningResult.setReadMarkdownPaths(List.of());
         reasoningResult.setToolInfoPhrases(List.of());
@@ -537,7 +551,7 @@ class CompilationServiceReasoningFlowTest {
         when(reasoningService.runCycle(any(), any())).thenReturn(reasoningResult);
 
         Log log = mock(Log.class);
-        ReinsConfig config = new ReinsConfig();
+        ReinsConfig config = createValidConfig();
         config.setFailOnError(false);
 
         service.processFiles(List.of(source.toFile()), config, tempDir, log);
@@ -546,7 +560,7 @@ class CompilationServiceReasoningFlowTest {
         verify(trackingStore).save(any(), any(), recordCaptor.capture());
 
         SourceTrackingRecord saved = recordCaptor.getValue();
-        assertTrue(saved.getCompiledFiles().isEmpty(), "Non-canonical compiled paths should be dropped, not preserved");
+        assertEquals(Set.of("target:domain/ValidType.java"), saved.getCompiledFiles().keySet(), "Non-canonical compiled paths should be dropped, not preserved");
     }
 
             

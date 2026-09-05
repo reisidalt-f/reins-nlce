@@ -27,6 +27,13 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import br.com.dizeno.reins.compilation.tracking.FileTrackingDetails;
+import br.com.dizeno.reins.compilation.tracking.SourceTrackingRecord;
+import br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver;
+import br.com.dizeno.reins.security.PathValidator;
+import br.com.dizeno.reins.source.domain.FileReference;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -46,8 +53,8 @@ class DefaultReasoningServiceCompiledFilesTest {
     private InferenceService inferenceService;
     private ResponseDirectiveParser directiveParser;
     private ReasoningPromptBuilder promptBuilder;
-    private br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService;
-    private ToolResultFormatter mcpResultFormatter;
+    private br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService;
+    private ToolResultFormatter toolResultFormatter;
     private DefaultReasoningService reasoningService;
 
     @TempDir
@@ -58,15 +65,15 @@ class DefaultReasoningServiceCompiledFilesTest {
         inferenceService = mock(InferenceService.class);
         directiveParser = mock(ResponseDirectiveParser.class);
         promptBuilder = mock(ReasoningPromptBuilder.class);
-        mcpService = mock(br.com.dizeno.reins.reasoning.tooling.ToolingService.class);
-        mcpResultFormatter = mock(ToolResultFormatter.class);
+        toolingService = mock(br.com.dizeno.reins.reasoning.tooling.ToolingService.class);
+        toolResultFormatter = mock(ToolResultFormatter.class);
 
         reasoningService = new DefaultReasoningService(
                 inferenceService,
                 directiveParser,
                 promptBuilder,
-                mcpService,
-                mcpResultFormatter,
+                toolingService,
+                toolResultFormatter,
                 new FileReasoningLogService(),
                 new CompilationTrackingStore()
         );
@@ -93,7 +100,7 @@ class DefaultReasoningServiceCompiledFilesTest {
                         capturedAttachments.add(new ArrayList<>(attachments));
                         return capturedAttachments.size() == 1 ? "prompt-1" : "prompt-2";
                 });
-        when(mcpResultFormatter.format(any())).thenReturn("mcp-result");
+        when(toolResultFormatter.format(any())).thenReturn("tool-result");
 
         ResponseDirective waitDirective = new ResponseDirective();
         waitDirective.setValid(true);
@@ -113,23 +120,25 @@ class DefaultReasoningServiceCompiledFilesTest {
         when(directiveParser.parse("first")).thenReturn(firstParse);
         when(directiveParser.parse("second")).thenReturn(secondParse);
 
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult mcpResult = br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.success(
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult toolResult = br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.success(
                 br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.LIST_COMPILED_FILES,
                 "main:/feature.md",
                 "listed"
         );
-        mcpResult.setListedPaths(List.of(
+        toolResult.setListedPaths(List.of(
                 "target:/main/java/demo/App.java",
                 "target:/main/resources/demo/logo.bin"
         ));
-        when(mcpService.execute(any(), any(), any(), any())).thenReturn(mcpResult);
+        when(toolingService.execute(any(), any(), any(), any())).thenReturn(toolResult);
 
         ReasoningRequest request = new ReasoningRequest();
         request.setMessage("start");
         request.setProjectRoot(tempDir);
         request.setBaseMappings(createBaseMappings());
 
-        reasoningService.runCycle(request, new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        reasoningService.runCycle(request, config);
 
         assertEquals(2, capturedAttachments.size());
         List<AttachedFilePayload> secondAttachments = capturedAttachments.get(1);
@@ -137,9 +146,9 @@ class DefaultReasoningServiceCompiledFilesTest {
         assertEquals("target:main/java/demo/App.java", secondAttachments.get(0).getQualifiedPath());
         assertTrue(secondAttachments.get(0).getContent().contains("class App"));
 
-        assertFalse(mcpResult.getCompiledFileStatuses().isEmpty());
-        assertTrue(mcpResult.getCompiledFileStatuses().stream().anyMatch(s -> "attached".equals(s.getAttachStatus())));
-        assertTrue(mcpResult.getCompiledFileStatuses().stream().anyMatch(s -> "not_attachable".equals(s.getAttachStatus())));
+        assertFalse(toolResult.getCompiledFileStatuses().isEmpty());
+        assertTrue(toolResult.getCompiledFileStatuses().stream().anyMatch(s -> "attached".equals(s.getAttachStatus())));
+        assertTrue(toolResult.getCompiledFileStatuses().stream().anyMatch(s -> "not_attachable".equals(s.getAttachStatus())));
     }
 
         @Test
@@ -156,7 +165,7 @@ class DefaultReasoningServiceCompiledFilesTest {
                         capturedAttachments.add(new ArrayList<>(attachments));
                         return capturedAttachments.size() == 1 ? "prompt-1" : "prompt-2";
                 });
-                when(mcpResultFormatter.format(any())).thenReturn("mcp-result");
+                when(toolResultFormatter.format(any())).thenReturn("tool-result");
 
                 ResponseDirective waitDirective = new ResponseDirective();
                 waitDirective.setValid(true);
@@ -183,14 +192,16 @@ class DefaultReasoningServiceCompiledFilesTest {
                 );
                 readResult.setResolvedBase("main");
                 readResult.setContent("entity-line-1\nentity-line-2\n");
-                when(mcpService.execute(any(), any(), any(), any())).thenReturn(readResult);
+                when(toolingService.execute(any(), any(), any(), any())).thenReturn(readResult);
 
                 ReasoningRequest request = new ReasoningRequest();
                 request.setMessage("start");
                 request.setProjectRoot(tempDir);
                 request.setBaseMappings(createBaseMappings());
 
-                reasoningService.runCycle(request, new ReinsConfig());
+                ReinsConfig config = new ReinsConfig();
+                config.setProvider("gemini");
+                reasoningService.runCycle(request, config);
 
                 assertEquals(2, capturedAttachments.size());
                 List<AttachedFilePayload> secondAttachments = capturedAttachments.get(1);
@@ -216,7 +227,7 @@ class DefaultReasoningServiceCompiledFilesTest {
                         capturedAttachments.add(new ArrayList<>(attachments));
                         return capturedAttachments.size() == 1 ? "prompt-1" : "prompt-2";
                 });
-                when(mcpResultFormatter.formatBatch(any())).thenReturn("batch-result");
+                when(toolResultFormatter.formatBatch(any())).thenReturn("batch-result");
 
                 ResponseDirective waitDirective = new ResponseDirective();
                 waitDirective.setValid(true);
@@ -256,14 +267,16 @@ class DefaultReasoningServiceCompiledFilesTest {
                 );
                 failure.setResolvedBase("main");
 
-                when(mcpService.execute(any(), any(), any(), any())).thenReturn(success, failure);
+                when(toolingService.execute(any(), any(), any(), any())).thenReturn(success, failure);
 
                 ReasoningRequest request = new ReasoningRequest();
                 request.setMessage("start");
                 request.setProjectRoot(tempDir);
                 request.setBaseMappings(createBaseMappings());
 
-                reasoningService.runCycle(request, new ReinsConfig());
+                ReinsConfig config = new ReinsConfig();
+                config.setProvider("gemini");
+                reasoningService.runCycle(request, config);
 
                 assertEquals(2, capturedAttachments.size());
                 List<AttachedFilePayload> secondAttachments = capturedAttachments.get(1);
@@ -285,7 +298,7 @@ class DefaultReasoningServiceCompiledFilesTest {
     }
 
         @Test
-        void acceptsYamlListForBatchMcpRequests() throws Exception {
+        void acceptsYamlListForBatchToolRequests() throws Exception {
                 MarkdownInferenceResponse firstResponse = mock(MarkdownInferenceResponse.class);
                 MarkdownInferenceResponse secondResponse = mock(MarkdownInferenceResponse.class);
                 when(firstResponse.getRawResponseText()).thenReturn("first");
@@ -293,7 +306,7 @@ class DefaultReasoningServiceCompiledFilesTest {
                 when(inferenceService.infer(any(), any())).thenReturn(firstResponse, secondResponse);
 
                 when(promptBuilder.buildPrompt(any(), any(), any(), anyBoolean())).thenReturn("prompt");
-                when(mcpResultFormatter.formatBatch(any())).thenReturn("batch-result");
+                when(toolResultFormatter.formatBatch(any())).thenReturn("batch-result");
 
                 ResponseDirective waitDirective = new ResponseDirective();
                 waitDirective.setValid(true);
@@ -323,16 +336,18 @@ class DefaultReasoningServiceCompiledFilesTest {
                                 "main:/domain",
                                 "ok"
                 );
-                when(mcpService.execute(any(), any(), any(), any())).thenReturn(result);
+                when(toolingService.execute(any(), any(), any(), any())).thenReturn(result);
 
                 ReasoningRequest request = new ReasoningRequest();
                 request.setMessage("start");
                 request.setProjectRoot(tempDir);
                 request.setBaseMappings(createBaseMappings());
 
-                reasoningService.runCycle(request, new ReinsConfig());
+                ReinsConfig config = new ReinsConfig();
+                config.setProvider("gemini");
+                reasoningService.runCycle(request, config);
 
-                verify(mcpService, times(2)).execute(any(), any(), any(), any());
+                verify(toolingService, times(2)).execute(any(), any(), any(), any());
         }
 
     @Test
@@ -356,14 +371,16 @@ class DefaultReasoningServiceCompiledFilesTest {
         request.setProjectRoot(tempDir);
         request.setBaseMappings(createBaseMappings());
 
-        ReasoningResult result = reasoningService.runCycle(request, new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        ReasoningResult result = reasoningService.runCycle(request, config);
 
         assertEquals("finish_success", result.getFinalIntent());
         assertEquals("finish_success", result.getTerminalReasonCode());
     }
 
     @Test
-    void acceptsSequentialYamlMapsForBatchMcpRequests() throws Exception {
+    void acceptsSequentialYamlMapsForBatchToolRequests() throws Exception {
         MarkdownInferenceResponse firstResponse = mock(MarkdownInferenceResponse.class);
         MarkdownInferenceResponse secondResponse = mock(MarkdownInferenceResponse.class);
         when(firstResponse.getRawResponseText()).thenReturn("first");
@@ -371,7 +388,7 @@ class DefaultReasoningServiceCompiledFilesTest {
         when(inferenceService.infer(any(), any())).thenReturn(firstResponse, secondResponse);
 
         when(promptBuilder.buildPrompt(any(), any(), any(), anyBoolean())).thenReturn("prompt");
-        when(mcpResultFormatter.formatBatch(any())).thenReturn("batch-result");
+        when(toolResultFormatter.formatBatch(any())).thenReturn("batch-result");
 
         ResponseDirective waitDirective = new ResponseDirective();
         waitDirective.setValid(true);
@@ -406,20 +423,22 @@ class DefaultReasoningServiceCompiledFilesTest {
                 "target:/main/java/demo/A.java",
                 "ok"
         );
-        when(mcpService.execute(any(), any(), any(), any())).thenReturn(result);
+        when(toolingService.execute(any(), any(), any(), any())).thenReturn(result);
 
         ReasoningRequest request = new ReasoningRequest();
         request.setMessage("start");
         request.setProjectRoot(tempDir);
         request.setBaseMappings(createBaseMappings());
 
-        reasoningService.runCycle(request, new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        reasoningService.runCycle(request, config);
 
-        verify(mcpService, times(2)).execute(any(), any(), any(), any());
+        verify(toolingService, times(2)).execute(any(), any(), any(), any());
     }
 
         @Test
-        void continuesAfterMalformedMcpRequestBody() throws Exception {
+        void continuesAfterMalformedToolRequestBody() throws Exception {
                 MarkdownInferenceResponse firstResponse = mock(MarkdownInferenceResponse.class);
                 MarkdownInferenceResponse secondResponse = mock(MarkdownInferenceResponse.class);
                 MarkdownInferenceResponse thirdResponse = mock(MarkdownInferenceResponse.class);
@@ -429,8 +448,8 @@ class DefaultReasoningServiceCompiledFilesTest {
                 when(inferenceService.infer(any(), any())).thenReturn(firstResponse, secondResponse, thirdResponse);
 
                 when(promptBuilder.buildPrompt(any(), any(), any(), anyBoolean())).thenReturn("prompt");
-                when(mcpResultFormatter.format(any())).thenReturn("mcp-error");
-                when(mcpResultFormatter.formatBatch(any())).thenReturn("batch-result");
+                when(toolResultFormatter.format(any())).thenReturn("tool-error");
+                when(toolResultFormatter.formatBatch(any())).thenReturn("batch-result");
 
                 ResponseDirective waitDirective = new ResponseDirective();
                 waitDirective.setValid(true);
@@ -445,7 +464,6 @@ class DefaultReasoningServiceCompiledFilesTest {
                 String malformedBody = "operation: patch_file\n"
                                 + "base: target\n"
                                 + "path: main/java/demo/A.java\n"
-                                + "atLine: 1\n"
                                 + "content: this text contains a colon: and is not quoted\n"
                                 + "intent: malformed patch content\n";
 
@@ -464,17 +482,19 @@ class DefaultReasoningServiceCompiledFilesTest {
                                 "target:/main/java/demo/B.java",
                                 "ok"
                 );
-                when(mcpService.execute(any(), any(), any(), any())).thenReturn(okResult);
+                when(toolingService.execute(any(), any(), any(), any())).thenReturn(okResult);
 
                 ReasoningRequest request = new ReasoningRequest();
                 request.setMessage("start");
                 request.setProjectRoot(tempDir);
                 request.setBaseMappings(createBaseMappings());
 
-                ReasoningResult result = reasoningService.runCycle(request, new ReinsConfig());
+                ReinsConfig config = new ReinsConfig();
+                config.setProvider("gemini");
+                ReasoningResult result = reasoningService.runCycle(request, config);
 
                 assertEquals("finish_success", result.getFinalIntent());
-                verify(mcpService, times(1)).execute(any(), any(), any(), any());
+                verify(toolingService, times(1)).execute(any(), any(), any(), any());
 
                 ArgumentCaptor<String> nextMessageCaptor = ArgumentCaptor.forClass(String.class);
                 verify(promptBuilder, atLeast(1)).buildPrompt(any(), nextMessageCaptor.capture(), any(), anyBoolean());
@@ -484,6 +504,51 @@ class DefaultReasoningServiceCompiledFilesTest {
                                 && message.contains("Invalid tool YAML payload.")
                                 && message.contains("Avoid repeating this exact formatting mistake."));
                 assertTrue(routedToRetryMessage,
-                        "Malformed MCP YAML should surface the concrete parser error and corrective guidance");
+                        "Malformed tool YAML should surface the concrete parser error and corrective guidance");
         }
+
+    @Test
+    void compiledFileRegistryHandler_normalizesTargetPathsAndResolvesCleanly() throws Exception {
+        Path projectRoot = tempDir.resolve("project");
+        Path mainNlDir = projectRoot.resolve("src/main/nl/br/com/demo");
+        Path targetClassDir = projectRoot.resolve("src/main/nl/br/com/demo");
+        Files.createDirectories(mainNlDir);
+        Files.createDirectories(targetClassDir);
+
+        Path sourceFile = mainNlDir.resolve("service.md");
+        Path compiledClass = targetClassDir.resolve("ServiceImpl.java");
+        Files.writeString(sourceFile, "Markdown source");
+        Files.writeString(compiledClass, "public class ServiceImpl {}");
+
+        BasePathMappingSet mappings = new BasePathMappingSet();
+        mappings.setMainRoot(projectRoot.resolve("src/main/nl"));
+        mappings.setTargetRoot(projectRoot.resolve("src"));
+        BasePathResolver resolver = new BasePathResolver(mappings, new PathValidator(projectRoot));
+
+        CompilationTrackingStore store = new CompilationTrackingStore();
+        SourceTrackingRecord record = new SourceTrackingRecord();
+        record.setSourcePath("main:br/com/demo/service.md");
+        record.setResolvedTargetRoot("src");
+
+        Map<String, FileTrackingDetails> compiledFilesMap = new LinkedHashMap<>();
+        compiledFilesMap.put("target:src/main/nl/br/com/demo/ServiceImpl.java", new FileTrackingDetails("target:src/main/nl/br/com/demo/ServiceImpl.java", "main", System.currentTimeMillis()));
+        record.setCompiledFiles(compiledFilesMap);
+        store.save(projectRoot, "main:br/com/demo/service.md", record);
+
+        br.com.dizeno.reins.reasoning.tooling.handler.CompiledFileRegistryHandler handler = new br.com.dizeno.reins.reasoning.tooling.handler.CompiledFileRegistryHandler(store);
+        ToolExecutionRequest request = new ToolExecutionRequest();
+        request.setOperation(ToolExecutionRequest.Operation.LIST_COMPILED_FILES);
+        request.setBase("main");
+        request.setPath("br/com/demo/service.md");
+
+        ToolExecutionResult result = handler.execute(request, resolver, "main", mock(ScriptRunnerConfig.class));
+
+        assertEquals(ToolExecutionResult.Status.SUCCESS, result.getStatus());
+        assertEquals(1, result.getListedPaths().size());
+        assertEquals("target:main/nl/br/com/demo/ServiceImpl.java", result.getListedPaths().get(0));
+
+        Path resolved = resolver.resolve(FileReference.fromCanonical(result.getListedPaths().get(0)));
+        assertTrue(Files.exists(resolved), "Resolved path should exist on disk");
+        assertEquals(compiledClass.toAbsolutePath().normalize(), resolved.toAbsolutePath().normalize());
+    }
 }

@@ -34,6 +34,7 @@ public class ResponseDirectiveParser {
     public static class ParseResult {
         private final ResponseDirective directive;
         private final String body;
+        private final List<ParseResult> blocks;
 
         /**
          * Constructs a new instance of {@link ParseResult}.
@@ -42,8 +43,20 @@ public class ResponseDirectiveParser {
          * @param body      the body
          */
         public ParseResult(ResponseDirective directive, String body) {
+            this(directive, body, null);
+        }
+
+        /**
+         * Constructs a new instance of {@link ParseResult} with block list.
+         *
+         * @param directive the directive
+         * @param body      the body
+         * @param blocks    the list of parsed blocks
+         */
+        public ParseResult(ResponseDirective directive, String body, List<ParseResult> blocks) {
             this.directive = directive;
             this.body = body;
+            this.blocks = blocks != null ? blocks : List.of(this);
         }
 
         /**
@@ -63,42 +76,138 @@ public class ResponseDirectiveParser {
         public String getBody() {
             return body;
         }
+
+        /**
+         * Gets all parsed blocks from the raw response.
+         *
+         * @return list of parsed blocks
+         */
+        public List<ParseResult> getBlocks() {
+            return blocks;
+        }
     }
 
     /**
-     * Parse.
+     * Splits a raw response string into individual block strings based on block header boundaries.
      *
-     * @param rawResponse the raw response
-     * @return the resulting result
+     * @param rawResponse the raw model response string
+     * @return list of raw block strings
      */
-    public ParseResult parse(String rawResponse) {
-        ResponseDirective directive = new ResponseDirective();
+    public List<String> splitBlocks(String rawResponse) {
         if (rawResponse == null || rawResponse.isBlank()) {
+            return List.of();
+        }
+        String[] parts = rawResponse.split("(?=(?:^|\\n\\s*\\n)\\s*(?:ROLE|INTENT|CONTENT_TYPE|GOTO_PHASE|GOTO-PHASE)\\s*:)");
+        List<String> blocks = new ArrayList<>();
+        for (String part : parts) {
+            String trimmed = part.trim();
+            if (!trimmed.isEmpty()) {
+                splitEmbeddedBlocks(trimmed, blocks);
+            }
+        }
+        while (blocks.size() > 1 && !startsWithBlockHeaders(blocks.get(0))) {
+            blocks.remove(0);
+        }
+        if (blocks.isEmpty()) {
+            blocks.add(rawResponse);
+        }
+        return blocks;
+    }
+
+    private void splitEmbeddedBlocks(String blockStr, List<String> outBlocks) {
+        String[] sections = blockStr.split("\\r?\\n\\r?\\n", 2);
+        if (sections.length < 2) {
+            outBlocks.add(blockStr);
+            return;
+        }
+
+        String headerBlock = sections[0];
+        String bodyBlock = sections[1];
+
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
+                "(?:^|\\n|\\s{2,})\\s*(?:ROLE|INTENT|GOTO_PHASE|GOTO-PHASE)\\s*:"
+        ).matcher(bodyBlock);
+
+        if (matcher.find()) {
+            int matchStart = matcher.start();
+            String firstBody = bodyBlock.substring(0, matchStart).trim();
+            String firstBlockStr = headerBlock + "\n\n" + firstBody;
+            outBlocks.add(firstBlockStr.trim());
+
+            String remainingStr = bodyBlock.substring(matchStart).trim();
+            splitEmbeddedBlocks(remainingStr, outBlocks);
+        } else {
+            outBlocks.add(blockStr);
+        }
+    }
+
+    private boolean startsWithBlockHeaders(String blockStr) {
+        if (blockStr == null || blockStr.isBlank()) {
+            return false;
+        }
+        String firstLine = blockStr.lines().findFirst().orElse("").trim();
+        return firstLine.startsWith("ROLE:")
+                || firstLine.startsWith("INTENT:")
+                || firstLine.startsWith("CONTENT_TYPE:")
+                || firstLine.startsWith("GOTO_PHASE:")
+                || firstLine.startsWith("GOTO-PHASE:")
+                || containsHeaderKey(firstLine);
+    }
+
+    private boolean containsHeaderKey(String line) {
+        String lower = line.toLowerCase(Locale.ROOT);
+        return lower.contains("intent:")
+                || lower.contains("content_type:")
+                || lower.contains("role:")
+                || lower.contains("goto_phase:")
+                || lower.contains("goto-phase:");
+    }
+
+    /**
+     * Parse single block.
+     *
+     * @param blockStr the single block raw string
+     * @return the resulting ParseResult for this block
+     */
+    public ParseResult parseSingleBlock(String blockStr) {
+        ResponseDirective directive = new ResponseDirective();
+        if (blockStr == null || blockStr.isBlank()) {
             directive.setValid(false);
             directive.setFailureReason("Empty response.");
             return new ParseResult(directive, "");
         }
 
-        String[] sections = rawResponse.split("\\r?\\n\\r?\\n", 2);
+        String[] sections = blockStr.split("\\r?\\n\\r?\\n", 2);
         if (sections.length < 2) {
             directive.setValid(false);
             directive.setFailureReason("Missing required blank line between headers and body.");
-            return new ParseResult(directive, rawResponse);
+            return new ParseResult(directive, blockStr);
         }
 
         String headerBlock = sections[0];
         String body = sections[1];
-        if (containsEmbeddedDirectiveHeaders(body)) {
-            directive.setValid(false);
-            directive.setFailureReason(
-                    "Response contains multiple directive header blocks; exactly one message is allowed per turn.");
-            return new ParseResult(directive, body);
-        }
         Map<String, String> headers = parseHeaders(headerBlock);
         directive.setRawHeaders(headers);
 
+        String gotoPhaseHeader = headers.get("goto_phase");
+        if (gotoPhaseHeader == null) {
+            gotoPhaseHeader = headers.get("goto-phase");
+        }
+        String targetPhaseHeader = headers.get("target_phase");
+        if (targetPhaseHeader == null) {
+            targetPhaseHeader = headers.get("target-phase");
+        }
+        String targetPhaseValue = gotoPhaseHeader != null ? gotoPhaseHeader : targetPhaseHeader;
+
         String intentRaw = headers.get("intent");
+        if (intentRaw == null && gotoPhaseHeader != null) {
+            intentRaw = "goto-phase";
+        }
         String contentTypeRaw = headers.get("content_type");
+        if (contentTypeRaw == null && "goto-phase".equalsIgnoreCase(intentRaw)) {
+            contentTypeRaw = "user-progress";
+        }
+
         if (intentRaw == null || contentTypeRaw == null) {
             directive.setValid(false);
             directive.setFailureReason("Missing INTENT or CONTENT_TYPE header.");
@@ -108,6 +217,9 @@ public class ResponseDirectiveParser {
         try {
             directive.setIntent(parseIntent(intentRaw));
             directive.setContentType(parseContentType(contentTypeRaw));
+            if (targetPhaseValue != null && !targetPhaseValue.isBlank()) {
+                directive.setTargetPhase(targetPhaseValue.trim());
+            }
             directive.setValid(true);
         } catch (IllegalArgumentException ex) {
             directive.setValid(false);
@@ -122,44 +234,96 @@ public class ResponseDirectiveParser {
     }
 
     /**
+     * Parses all blocks in rawResponse.
+     *
+     * @param rawResponse the raw response string
+     * @return list of parsed block results
+     */
+    public List<ParseResult> parseAll(String rawResponse) {
+        List<String> rawBlocks = splitBlocks(rawResponse);
+        if (rawBlocks.isEmpty()) {
+            ResponseDirective directive = new ResponseDirective();
+            directive.setValid(false);
+            directive.setFailureReason("Empty response.");
+            return List.of(new ParseResult(directive, ""));
+        }
+        List<ParseResult> results = new ArrayList<>();
+        for (String rawBlock : rawBlocks) {
+            results.add(parseSingleBlock(rawBlock));
+        }
+        return results;
+    }
+
+    /**
+     * Parse.
+     *
+     * @param rawResponse the raw response
+     * @return the resulting result
+     */
+    public ParseResult parse(String rawResponse) {
+        List<ParseResult> blocks = parseAll(rawResponse);
+        if (blocks.isEmpty()) {
+            ResponseDirective directive = new ResponseDirective();
+            directive.setValid(false);
+            directive.setFailureReason("Empty response.");
+            return new ParseResult(directive, "", List.of());
+        }
+
+        for (ParseResult b : blocks) {
+            if (!b.getDirective().isValid()) {
+                return new ParseResult(b.getDirective(), b.getBody(), blocks);
+            }
+        }
+
+        ParseResult primary = selectPrimaryBlock(blocks);
+        return new ParseResult(primary.getDirective(), primary.getBody(), blocks);
+    }
+
+    private ParseResult selectPrimaryBlock(List<ParseResult> blocks) {
+        if (blocks.size() == 1) {
+            return blocks.get(0);
+        }
+        for (ParseResult b : blocks) {
+            if (b.getDirective().getContentType() == ResponseDirective.ContentType.TOOL_REQUEST) {
+                return b;
+            }
+        }
+        for (ParseResult b : blocks) {
+            if (b.getDirective().isFinishIntent()) {
+                return b;
+            }
+        }
+        return blocks.get(blocks.size() - 1);
+    }
+
+    /**
      * Parse Canonical Message.
      *
      * @param rawMessage the raw message
      * @return the resolved or constructed object
      */
     public PipelineExchangeMessage parseCanonicalMessage(String rawMessage) {
-        if (rawMessage == null || rawMessage.isBlank()) {
+        List<ParseResult> blocks = parseAll(rawMessage);
+        if (blocks.isEmpty()) {
             return PipelineExchangeMessage.invalid("", "Empty response.");
         }
-
-        String[] sections = rawMessage.split("\\r?\\n\\r?\\n", 2);
-        if (sections.length < 2) {
-            return PipelineExchangeMessage.invalid(rawMessage, "Missing required blank line between headers and body.");
+        ParseResult primary = selectPrimaryBlock(blocks);
+        ResponseDirective directive = primary.getDirective();
+        if (!directive.isValid()) {
+            return PipelineExchangeMessage.invalid(primary.getBody(), directive.getFailureReason());
         }
 
-        Map<String, String> headers = parseHeaders(sections[0]);
-        String intent = headers.get("intent");
-        String contentType = headers.get("content_type");
-        String body = sections[1];
-        if (containsEmbeddedDirectiveHeaders(body)) {
-            return PipelineExchangeMessage.invalid(body,
-                    "Response contains multiple directive header blocks; exactly one message is allowed per turn.");
-        }
-        if (intent == null || contentType == null) {
-            return PipelineExchangeMessage.invalid(body, "Missing INTENT or CONTENT_TYPE header.");
-        }
-        try {
-            parseIntent(intent);
-        } catch (IllegalArgumentException ex) {
-            return PipelineExchangeMessage.invalid(body, ex.getMessage());
-        }
+        String intent = directive.getRawHeaders().getOrDefault("intent", "");
+        String contentType = directive.getRawHeaders().getOrDefault("content_type", "");
+        String body = primary.getBody();
+
         return new PipelineExchangeMessage(
                 intent.trim(),
                 contentType.trim(),
-                headers,
+                directive.getRawHeaders(),
                 body,
-                isGeminiMessage(contentType) ? body : null,
-                isUserProgress(contentType) || isMessageToUser(contentType) ? body : null,
+                isMessageToModel(contentType) ? body : null,
+                isUserProgress(contentType) || isMessageToUser(contentType) || isConversationSummary(contentType) ? body : null,
                 true,
                 null);
     }
@@ -173,10 +337,23 @@ public class ResponseDirectiveParser {
                 continue;
             }
             String key = line.substring(0, separator).trim().toLowerCase(Locale.ROOT);
+            int spaceIdx = key.lastIndexOf(' ');
+            if (spaceIdx >= 0) {
+                String subKey = key.substring(spaceIdx + 1);
+                if (isKnownHeaderKey(subKey)) {
+                    key = subKey;
+                }
+            }
             String value = line.substring(separator + 1).trim();
             headers.put(key, value);
         }
         return headers;
+    }
+
+    private boolean isKnownHeaderKey(String key) {
+        return "intent".equals(key) || "content_type".equals(key) || "role".equals(key)
+                || "goto_phase".equals(key) || "goto-phase".equals(key)
+                || "target_phase".equals(key) || "target-phase".equals(key);
     }
 
     private static String unquote(String value) {
@@ -192,20 +369,22 @@ public class ResponseDirectiveParser {
             case "finish-success" -> ResponseDirective.Intent.FINISH_SUCCESS;
             case "finish-error" -> ResponseDirective.Intent.FINISH_ERROR;
             case "waiting-for-next-message" -> ResponseDirective.Intent.WAITING_FOR_NEXT_MESSAGE;
+            case "goto-phase", "goto_phase" -> ResponseDirective.Intent.GOTO_PHASE;
             default -> throw new IllegalArgumentException("Unsupported INTENT value: " + value);
         };
     }
 
     private ResponseDirective.ContentType parseContentType(String value) {
         return switch (unquote(value).toLowerCase(Locale.ROOT)) {
-            case "message-to-user" -> ResponseDirective.ContentType.MESSAGE_TO_USER;
-            case "tool-request", "mcp-request" -> ResponseDirective.ContentType.TOOL_REQUEST;
+            case "message-to-user", "message-to-model", "user-progress" -> ResponseDirective.ContentType.MESSAGE_TO_USER;
+            case "conversation-summary", "summary" -> ResponseDirective.ContentType.CONVERSATION_SUMMARY;
+            case "tool-request" -> ResponseDirective.ContentType.TOOL_REQUEST;
             default -> throw new IllegalArgumentException("Unsupported CONTENT_TYPE value: " + value);
         };
     }
 
-    private boolean isGeminiMessage(String contentType) {
-        return "gemini-message".equalsIgnoreCase(contentType);
+    private boolean isMessageToModel(String contentType) {
+        return "message-to-model".equalsIgnoreCase(contentType);
     }
 
     private boolean isUserProgress(String contentType) {
@@ -216,12 +395,8 @@ public class ResponseDirectiveParser {
         return "message-to-user".equalsIgnoreCase(contentType);
     }
 
-    private boolean containsEmbeddedDirectiveHeaders(String body) {
-        if (body == null || body.isBlank()) {
-            return false;
-        }
-        String normalized = body.replace("\r\n", "\n");
-        return normalized.matches("(?s).*(^|\\n)INTENT\\s*:.*\\nCONTENT_TYPE\\s*:.*");
+    private boolean isConversationSummary(String contentType) {
+        return "conversation-summary".equalsIgnoreCase(contentType) || "summary".equalsIgnoreCase(contentType);
     }
 
     private void extractPlanningContent(ResponseDirective directive, String body) {
@@ -401,9 +576,6 @@ public class ResponseDirectiveParser {
         if (parts.length >= 2) {
             try {
                 String typeStr = parts[1].trim().toUpperCase(Locale.ROOT);
-                if ("MCP_TOOL_REQUEST".equals(typeStr)) {
-                    typeStr = "TOOL_REQUEST";
-                }
                 task.setTaskType(ResponseDirective.TaskType.valueOf(typeStr));
             } catch (IllegalArgumentException ignored) {
                 task.setTaskType(ResponseDirective.TaskType.ANALYSIS);

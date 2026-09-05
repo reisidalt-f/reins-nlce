@@ -12,13 +12,10 @@
 package br.com.dizeno.reins.reasoning.inference;
 
 import br.com.dizeno.reins.run.config.*;
-import br.com.dizeno.reins.reasoning.inference.llm.providers.gemini.GeminiClient;
-import br.com.dizeno.reins.reasoning.inference.llm.providers.gemini.GeminiPromptBuilder;
-import br.com.dizeno.reins.reasoning.inference.llm.adapters.GeminiProviderAdapter;
+import br.com.dizeno.reins.run.config.settings.*;
 import br.com.dizeno.reins.reasoning.inference.llm.model.LlmRequest;
 import br.com.dizeno.reins.reasoning.inference.llm.model.LlmRequestOptions;
 import br.com.dizeno.reins.reasoning.inference.llm.model.LlmResponse;
-import br.com.dizeno.reins.reasoning.inference.llm.registry.DefaultAdapterRegistry;
 import br.com.dizeno.reins.reasoning.inference.llm.spi.LlmService;
 import br.com.dizeno.reins.reasoning.inference.llm.service.DefaultLlmService;
 import br.com.dizeno.reins.reasoning.scripting.ConversationMessage;
@@ -31,7 +28,7 @@ import java.util.regex.Pattern;
 /**
  * InferenceService is part of the API interactions with LLM endpoints,
  * configuring connections, and logging payloads in the reins architecture.
- * Performs API invocations to Gemini and Ollama providers, managing
+ * Performs API invocations to configured providers via LlmService, managing
  * configuration endpoints and request/response logging.
  */
 public class InferenceService {
@@ -45,25 +42,6 @@ public class InferenceService {
      */
     public InferenceService() {
         this(new DefaultLlmService());
-    }
-
-    /**
-     * Constructs a new instance of {@link InferenceService}.
-     *
-     * @param promptBuilder the prompt builder
-     * @param geminiClient  the gemini client
-     */
-    public InferenceService(GeminiPromptBuilder promptBuilder,
-            GeminiClient geminiClient) {
-        DefaultAdapterRegistry registry = new DefaultAdapterRegistry();
-        registry.register(new GeminiProviderAdapter(promptBuilder, geminiClient));
-        this.llmService = new DefaultLlmService(
-                registry,
-                new br.com.dizeno.reins.reasoning.inference.llm.registry.LlmProviderResolver(),
-                new br.com.dizeno.reins.reasoning.inference.llm.service.LlmCapabilityGuard(),
-                new br.com.dizeno.reins.reasoning.inference.llm.service.LlmResponseNormalizer(),
-                new br.com.dizeno.reins.reasoning.inference.llm.error.LlmErrorMapper(),
-                new br.com.dizeno.reins.reasoning.inference.llm.logging.LlmLifecycleLogger());
     }
 
     /**
@@ -98,20 +76,22 @@ public class InferenceService {
         String rawResponseText = null;
 
         if (request.getConversationHistory() != null) {
-
             rawResponseText = extractFixtureResponse(request.getConversationHistory());
-        } else if (request.getMarkdownContent() != null) {
-            rawResponseText = extractFixtureResponse(request.getMarkdownContent());
         }
 
         if (rawResponseText == null) {
             if (config.isDryRun()) {
                 rawResponseText = buildDryRunResponse(request);
+                br.com.dizeno.reins.reasoning.inference.llm.logging.ModelRequestResponseLogger.log(
+                        toLlmRequest(request, config), rawResponseText, config);
             } else {
                 LlmRequest llmRequest = toLlmRequest(request, config);
                 LlmResponse llmResponse = llmService.invoke(llmRequest, config);
                 rawResponseText = llmResponse.getContent();
             }
+        } else {
+            br.com.dizeno.reins.reasoning.inference.llm.logging.ModelRequestResponseLogger.log(
+                    toLlmRequest(request, config), rawResponseText, config);
         }
         MarkdownInferenceResponse response = new MarkdownInferenceResponse();
         response.setRawResponseText(rawResponseText);
@@ -139,17 +119,14 @@ public class InferenceService {
         llmRequest.setUseCachedContent(request.isUseCachedContent());
 
         LlmRequestOptions options = new LlmRequestOptions();
-        if (request.getModelConfigSnapshot() != null) {
-            options.setTimeoutSeconds(request.getModelConfigSnapshot().getTimeoutSeconds());
-            options.setRetryAttempts(request.getModelConfigSnapshot().getRetryAttempts());
-            if (request.getModelConfigSnapshot().getGeneration() != null) {
-                options.setTemperature(request.getModelConfigSnapshot().getGeneration().getTemperature());
-            }
-        } else if (config != null && config.getGemini() != null) {
-            options.setTimeoutSeconds(config.getGemini().getTimeoutSeconds());
-            options.setRetryAttempts(config.getGemini().getRetryAttempts());
-            if (config.getGemini().getGeneration() != null) {
-                options.setTemperature(config.getGemini().getGeneration().getTemperature());
+        ModelProviderSetting snapshot = request.getModelConfigSnapshot() != null
+                ? request.getModelConfigSnapshot()
+                : (config != null ? config.resolveActiveModelSettings() : null);
+        if (snapshot != null) {
+            options.setTimeoutSeconds(snapshot.getTimeoutSeconds());
+            options.setRetryAttempts(snapshot.getRetryAttempts());
+            if (snapshot.getTemperature() != null) {
+                options.setTemperature(snapshot.getTemperature());
             }
         }
         llmRequest.setOptions(options);
@@ -192,7 +169,7 @@ public class InferenceService {
         String baseName = sourceName.endsWith(".md")
                 ? sourceName.substring(0, sourceName.length() - 3)
                 : sourceName;
-        return "```java path=\"" + baseName + ".compiled.java\"\n"
+        return "``` path=\"" + baseName + ".compiled.out\"\n"
                 + "// dry-run placeholder for " + request.getSourcePath() + "\n"
                 + "```\n";
     }

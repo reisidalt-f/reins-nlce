@@ -64,6 +64,16 @@ public class ReasoningAttachmentManagementService {
                                                                 Path projectRoot,
                                                                 ReinsConfig config,
                                                                 ReasoningCycleLog cycleLog) {
+        return buildFirstTurnAttachments(request, sourceAttachment, firstTurnReferenceTreeContext, projectRoot, config, cycleLog, null);
+    }
+
+    public List<AttachedFilePayload> buildFirstTurnAttachments(ReasoningRequest request,
+                                                                AttachedFilePayload sourceAttachment,
+                                                                ReferenceTreeContextService.ReferenceTreeContext firstTurnReferenceTreeContext,
+                                                                Path projectRoot,
+                                                                ReinsConfig config,
+                                                                ReasoningCycleLog cycleLog,
+                                                                String currentPhase) {
         if (sourceAttachment == null) {
             return List.of();
         }
@@ -79,6 +89,9 @@ public class ReasoningAttachmentManagementService {
 
         if (compilationBackgroundPayload != null && !compilationBackgroundPayload.isEmpty()) {
             for (CompilationBackgroundFile ctxFile : compilationBackgroundPayload.getFiles()) {
+                if (!ctxFile.matchesPhase(currentPhase)) {
+                    continue;
+                }
                 AttachedFilePayload ctxAttachment = new AttachedFilePayload();
                 String qualifiedContextPath = messageFormattingService.canonicalizeContextAttachmentPath(ctxFile.getDisplayPath());
                 int separator = qualifiedContextPath.indexOf(':');
@@ -92,7 +105,9 @@ public class ReasoningAttachmentManagementService {
 
         attachments.add(sourceAttachment);
 
-        boolean attachReferencedFiles = config.getContext() == null || config.getContext().isAttachReferencedFiles();
+        boolean attachReferencedFiles = config.getContext() != null
+                && config.getContext().getReferencesTree() != null
+                && config.getContext().getReferencesTree().isAttachFiles();
         if (attachReferencedFiles) {
             List<AttachedFilePayload> referencedAttachments = referencedAttachmentBuilder.build(
                     firstTurnReferenceTreeContext,
@@ -101,7 +116,7 @@ public class ReasoningAttachmentManagementService {
         } else if (cycleLog != null) {
             cycleStateManager.writeLog(cycleLog, ReasoningLogEntry.Direction.OUTBOUND, "system", 1,
                     "lifecycle: referenced-source-attachments-disabled\n"
-                            + "context.attachReferencedFiles=false");
+                            + "context.referencesTree.attachFiles=false");
         }
 
         return attachments;

@@ -69,7 +69,8 @@ public final class ReasoningHelper {
      * @param processingStatus             the processing status
      * @return the resolved or constructed object
      */
-    public static ReasoningRequest buildReasoningRequestFor(String canonicalSourcePath,
+    public static ReasoningRequest buildReasoningRequestFor(Path sourcePath,
+            String canonicalSourcePath,
             String sourceCategory,
             String sourceHash,
             ReinsConfig config,
@@ -78,16 +79,19 @@ public final class ReasoningHelper {
             Log log,
             SourceProcessingStatus processingStatus) {
         ReasoningRequest request = new ReasoningRequest();
+        String qualifiedPath = sourcePath != null
+                ? PathHelper.formatBaseRelativePath(sourcePath, config, projectRoot)
+                : PathHelper.resolveMainSourceQualifiedPath(canonicalSourcePath, sourceCategory, config, projectRoot);
+
         request.setSourcePath(canonicalSourcePath);
         request.setSourceScope(sourceCategory);
         request.setSourceHash(sourceHash);
-        request.setMessage(buildReasoningMessage(canonicalSourcePath, processingStatus));
+        request.setMessage(buildReasoningMessage(qualifiedPath, processingStatus));
         request.setProcessingStatus(processingStatus);
         request.setProjectRoot(projectRoot);
         request.setBaseMappings(BasePathMappingSet.forScope(config, projectRoot, sourceCategory));
-        request.setMainSourceQualifiedPath(
-                PathHelper.resolveMainSourceQualifiedPath(canonicalSourcePath, sourceCategory));
-        request.setModelConfigSnapshot(config.getGemini());
+        request.setMainSourceQualifiedPath(qualifiedPath);
+        request.setModelConfigSnapshot(config != null ? config.resolveActiveModelSettings() : null);
         request.setAttachments(List.of());
         request.setUserMessageListener(log::info);
         request.setOperationLogger(phrase -> {
@@ -100,6 +104,17 @@ public final class ReasoningHelper {
                         ? CompilationBackgroundPayload.empty()
                         : compilationBackgroundPayload);
         return request;
+    }
+
+    public static ReasoningRequest buildReasoningRequestFor(String canonicalSourcePath,
+            String sourceCategory,
+            String sourceHash,
+            ReinsConfig config,
+            Path projectRoot,
+            CompilationBackgroundPayload compilationBackgroundPayload,
+            Log log,
+            SourceProcessingStatus processingStatus) {
+        return buildReasoningRequestFor(null, canonicalSourcePath, sourceCategory, sourceHash, config, projectRoot, compilationBackgroundPayload, log, processingStatus);
     }
 
     /**

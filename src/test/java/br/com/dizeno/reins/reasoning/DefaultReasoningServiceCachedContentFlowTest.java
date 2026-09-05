@@ -80,9 +80,11 @@ class DefaultReasoningServiceCachedContentFlowTest {
                 new CompilationTrackingStore()
         );
 
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
         ReasoningResult result = service.runCycle(
                 baseRequest(tempDir.relativize(source).toString().replace('\\', '/')),
-                new ReinsConfig());
+                config);
 
         assertEquals("finish_success", result.getFinalIntent());
         verify(inferenceService).createCachedContent(any(), any());
@@ -117,18 +119,16 @@ class DefaultReasoningServiceCachedContentFlowTest {
                 .map(i -> (List<ConversationMessage>) i.getArgument(1))
                 .findFirst()
                 .orElseThrow();
-        assertEquals(6, cacheMessages.size());
+        assertEquals(5, cacheMessages.size());
         assertTrue(cacheMessages.stream().allMatch(m -> m.getRole() == ConversationMessage.Role.SYSTEM));
-        assertTrue(cacheMessages.stream().noneMatch(m -> m.getText().contains("Compile the main source file:")),
+        assertTrue(cacheMessages.stream().noneMatch(m -> m.getText().contains("Compile this source file:")),
                 "Cached system payloads should not include first user compile instruction");
         ConversationMessage backgroundFiles = cacheMessages.stream()
                 .filter(m -> m.getText().contains("Background attachments passed to this cycle:"))
                 .findFirst()
                 .orElseThrow();
-        assertFalse(backgroundFiles.getAttachments().isEmpty(),
-                "Background-files system payload should carry first-turn context attachments");
-        assertTrue(backgroundFiles.getAttachments().stream().anyMatch(a -> "main:domain.md".equals(a.getQualifiedPath())),
-                "Background-files system payload should include the main source attachment");
+        assertTrue(backgroundFiles.getAttachments().isEmpty(),
+                "Background-files system payload should contain only files added through background sources");
     }
 
     @Test
@@ -157,7 +157,9 @@ class DefaultReasoningServiceCachedContentFlowTest {
                 new CompilationTrackingStore()
         );
 
-        ReasoningResult result = service.runCycle(baseRequest("src/main/nl/domain.md"), new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        ReasoningResult result = service.runCycle(baseRequest("src/main/nl/domain.md"), config);
 
         assertEquals("finish_error", result.getFinalIntent());
         verify(inferenceService).deleteCachedContent(any(), any());
@@ -189,7 +191,9 @@ class DefaultReasoningServiceCachedContentFlowTest {
                 new CompilationTrackingStore()
         );
 
-        ReasoningResult result = service.runCycle(baseRequest("src/main/nl/domain.md"), new ReinsConfig());
+        ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
+        ReasoningResult result = service.runCycle(baseRequest("src/main/nl/domain.md"), config);
 
         assertEquals("finish_success", result.getFinalIntent());
         verify(inferenceService, never()).deleteCachedContent(any(), any());
@@ -234,6 +238,7 @@ class DefaultReasoningServiceCachedContentFlowTest {
         );
 
         ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
         config.getContext().setCachedContent(false);
 
         ReasoningRequest request = baseRequest(tempDir.relativize(source).toString().replace('\\', '/'));
@@ -259,11 +264,8 @@ class DefaultReasoningServiceCachedContentFlowTest {
                 .orElseThrow();
 
         assertFalse(systemMessages.isEmpty());
-        assertTrue(systemMessages.stream().noneMatch(m -> m.getText().contains("Compile the main source file:")));
-        assertTrue(systemMessages.stream()
-                .flatMap(m -> m.getAttachments().stream())
-                .anyMatch(a -> "main:domain.md".equals(a.getQualifiedPath())));
-        assertTrue(firstUser.getText().contains("main:domain.md"));
+        assertTrue(systemMessages.stream().noneMatch(m -> m.getText().contains("Compile this source file:")));
+        assertTrue(firstUser.getText().contains("domain.md"));
         assertTrue(firstUser.getText().endsWith("Turn 1/10"));
         assertTrue(firstUser.getAttachments() == null || firstUser.getAttachments().isEmpty());
         assertFalse(sent.isUseCachedContent());

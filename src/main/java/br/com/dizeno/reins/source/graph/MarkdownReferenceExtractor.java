@@ -66,7 +66,7 @@ public class MarkdownReferenceExtractor {
         if (candidate == null || candidate.isBlank() || !candidate.endsWith(".md")) {
             return false;
         }
-        if (candidate.contains("://") || candidate.startsWith("/")) {
+        if (candidate.contains("://")) {
             return false;
         }
         return !Path.of(candidate).isAbsolute();

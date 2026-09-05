@@ -126,16 +126,15 @@ public class ReasoningToolOperationHandler {
         key.append(request.getOperation())
             .append('|').append(request.getBase())
             .append('|').append(request.getPath())
+            .append('|').append(request.getDestination())
             .append('|').append(request.getScript())
             .append('|').append(request.getArgs())
-            .append('|').append(request.getAtLine())
-            .append('|').append(request.getReplacing())
             .append('|').append(request.isRecursive())
             .append('|').append(request.isCreateParents())
             .append('|').append(request.getContent());
 
-        if (request.getOperation() == ToolExecutionRequest.Operation.ADD_INFERENCE_NOTE
-            || request.getOperation() == ToolExecutionRequest.Operation.CLEAR_INFERENCE_NOTES) {
+        if (request.getOperation() == ToolExecutionRequest.Operation.ADD_REASONING_NOTE
+            || request.getOperation() == ToolExecutionRequest.Operation.CLEAR_REASONING_NOTES) {
             key.append('|').append(request.getSource())
                 .append('|').append(request.getCompiled())
                 .append('|').append(request.getNote());
@@ -155,7 +154,14 @@ public class ReasoningToolOperationHandler {
     public boolean isReferenceMutationBlocked(ReasoningRequest request,
                                               ToolExecutionRequest operationRequest,
                                               BasePathResolver resolver) {
-        return evaluateReferenceMutationDecision(request, operationRequest, resolver).isBlocked();
+        return evaluateReferenceMutationDecision(request, operationRequest, resolver, true).isBlocked();
+    }
+
+    public boolean isReferenceMutationBlocked(ReasoningRequest request,
+                                              ToolExecutionRequest operationRequest,
+                                              BasePathResolver resolver,
+                                              boolean grantFileOwnership) {
+        return evaluateReferenceMutationDecision(request, operationRequest, resolver, grantFileOwnership).isBlocked();
     }
 
     /**
@@ -169,9 +175,29 @@ public class ReasoningToolOperationHandler {
     public ReferenceMutationDecision evaluateReferenceMutationDecision(ReasoningRequest request,
                                                                        ToolExecutionRequest operationRequest,
                                                                        BasePathResolver resolver) {
-        if (operationRequest.getOperation() != ToolExecutionRequest.Operation.WRITE_FILE
-                && operationRequest.getOperation() != ToolExecutionRequest.Operation.PATCH_FILE
-                && operationRequest.getOperation() != ToolExecutionRequest.Operation.DELETE_FILE) {
+        return evaluateReferenceMutationDecision(request, operationRequest, resolver, true);
+    }
+
+    public ReferenceMutationDecision evaluateReferenceMutationDecision(ReasoningRequest request,
+                                                                       ToolExecutionRequest operationRequest,
+                                                                       BasePathResolver resolver,
+                                                                       br.com.dizeno.reins.run.config.ReinsConfig config) {
+        boolean grant = config == null || config.getTooling() == null || config.getTooling().isGrantFileOwnership();
+        return evaluateReferenceMutationDecision(request, operationRequest, resolver, grant);
+    }
+
+    public ReferenceMutationDecision evaluateReferenceMutationDecision(ReasoningRequest request,
+                                                                       ToolExecutionRequest operationRequest,
+                                                                       BasePathResolver resolver,
+                                                                       boolean grantFileOwnership) {
+        boolean isMutation = operationRequest.getOperation() == ToolExecutionRequest.Operation.WRITE_FILE
+                || operationRequest.getOperation() == ToolExecutionRequest.Operation.PATCH_FILE
+                || operationRequest.getOperation() == ToolExecutionRequest.Operation.DELETE_FILE
+                || operationRequest.getOperation() == ToolExecutionRequest.Operation.APPEND_FILE
+                || operationRequest.getOperation() == ToolExecutionRequest.Operation.PREPEND_FILE
+                || operationRequest.getOperation() == ToolExecutionRequest.Operation.MOVE_FILE
+                || operationRequest.getOperation() == ToolExecutionRequest.Operation.COPY_FILE;
+        if (!isMutation) {
             return ReferenceMutationDecision.allowNoConflict(0, 0);
         }
         if (request.getSourcePath() == null || request.getSourcePath().isBlank()) {
@@ -230,40 +256,53 @@ public class ReasoningToolOperationHandler {
                     projectRoot,
                     activeSourceCanonical
             );
-            if (mainRecord.isEmpty()) {
-                
-                
-                
-                Optional<String> ownerSource = trackingStore.findOwnerSource(projectRoot, operationCanonical);
-                if (ownerSource.isPresent() && !ownerSource.get().equals(activeSourceCanonical)) {
-                    return ReferenceMutationDecision.blockForeignOwned();
+
+            int consideredReferences = 0;
+            int ignoredSelfReferences = 0;
+
+            if (mainRecord.isPresent()) {
+                Set<String> normalizedReferences = new HashSet<>();
+                for (String reference : mainRecord.get().getMarkdownReferences().keySet()) {
+                    normalizedReferences.add(canonicalSourceIdentity(reference));
                 }
-                return ReferenceMutationDecision.allowNoConflict(0, 0);
-            }
+                consideredReferences = normalizedReferences.size();
+                Set<String> nonSelfReferences = normalizedNonSelfReferences(normalizedReferences, activeSourceCanonical);
+                ignoredSelfReferences = consideredReferences - nonSelfReferences.size();
 
-            Set<String> normalizedReferences = new HashSet<>();
-            for (String reference : mainRecord.get().getMarkdownReferences().keySet()) {
-                normalizedReferences.add(canonicalSourceIdentity(reference));
-            }
-            int consideredReferences = normalizedReferences.size();
-            Set<String> nonSelfReferences = normalizedNonSelfReferences(normalizedReferences, activeSourceCanonical);
-            int ignoredSelfReferences = consideredReferences - nonSelfReferences.size();
+                if (nonSelfReferences.contains(operationCanonical)) {
+                    return ReferenceMutationDecision.blockReferencedSource(consideredReferences, ignoredSelfReferences);
+                }
 
-            if (nonSelfReferences.contains(operationCanonical)) {
-                return ReferenceMutationDecision.blockReferencedSource(consideredReferences, ignoredSelfReferences);
-            }
-
-            for (String referencedSource : nonSelfReferences) {
-                Optional<SourceTrackingRecord> refRecord = trackingStore.load(projectRoot, referencedSource);
-                if (refRecord.isPresent()) {
-                    for (String compiledPath : refRecord.get().getCompiledFiles().keySet()) {
-                        String canonicalCompiled = trackingStore.canonicalizePath(compiledPath);
-                        if (canonicalCompiled.equals(operationCanonical)) {
-                            return ReferenceMutationDecision.blockReferencedCompiled(consideredReferences, ignoredSelfReferences);
+                for (String referencedSource : nonSelfReferences) {
+                    Optional<SourceTrackingRecord> refRecord = trackingStore.load(projectRoot, referencedSource);
+                    if (refRecord.isPresent()) {
+                        for (String compiledPath : refRecord.get().getCompiledFiles().keySet()) {
+                            String canonicalCompiled = trackingStore.canonicalizePath(compiledPath);
+                            if (canonicalCompiled.equals(operationCanonical)) {
+                                return ReferenceMutationDecision.blockReferencedCompiled(consideredReferences, ignoredSelfReferences);
+                            }
                         }
                     }
                 }
             }
+
+            Optional<String> ownerSourceOpt = trackingStore.findOwnerSource(projectRoot, operationCanonical);
+            if (ownerSourceOpt.isPresent() && !ownerSourceOpt.get().equals(activeSourceCanonical)) {
+                String ownerSource = ownerSourceOpt.get();
+                if (grantFileOwnership) {
+                    Optional<SourceTrackingRecord> ownerRecordOpt = trackingStore.load(projectRoot, ownerSource);
+                    if (ownerRecordOpt.isPresent()) {
+                        SourceTrackingRecord ownerRecord = ownerRecordOpt.get();
+                        if (ownerRecord.getCompiledFiles() != null) {
+                            ownerRecord.getCompiledFiles().keySet().removeIf(k -> trackingStore.canonicalizePath(k).equals(operationCanonical));
+                            trackingStore.save(projectRoot, ownerSource, ownerRecord);
+                        }
+                    }
+                } else {
+                    return ReferenceMutationDecision.blockForeignOwned();
+                }
+            }
+
             return ReferenceMutationDecision.allowNoConflict(consideredReferences, ignoredSelfReferences);
         } catch (Exception ex) {
             return ReferenceMutationDecision.errorFallback(0, 0);
@@ -280,7 +319,7 @@ public class ReasoningToolOperationHandler {
         return switch (decision.getReasonCode()) {
             case BLOCK_REFERENCED_SOURCE -> "reason=BLOCK_REFERENCED_SOURCE ignoredSelfReferences=" + decision.getIgnoredSelfReferences();
             case BLOCK_REFERENCED_COMPILED -> "reason=BLOCK_REFERENCED_COMPILED ignoredSelfReferences=" + decision.getIgnoredSelfReferences();
-            case BLOCK_FOREIGN_OWNED -> "reason=BLOCK_FOREIGN_OWNED ignoredSelfReferences=" + decision.getIgnoredSelfReferences();
+            case BLOCK_FOREIGN_OWNED -> "reason=BLOCK_FOREIGN_OWNED (File is owned by another source and tooling.grantFileOwnership is false) ignoredSelfReferences=" + decision.getIgnoredSelfReferences();
             case BLOCK_TEST_MAIN_EXCLUSION -> "reason=BLOCK_TEST_MAIN_EXCLUSION ignoredSelfReferences=" + decision.getIgnoredSelfReferences();
             case ERROR_FALLBACK -> "reason=ERROR_FALLBACK ignoredSelfReferences=" + decision.getIgnoredSelfReferences();
             case ALLOW_NO_CONFLICT -> "reason=ALLOW_NO_CONFLICT ignoredSelfReferences=" + decision.getIgnoredSelfReferences();

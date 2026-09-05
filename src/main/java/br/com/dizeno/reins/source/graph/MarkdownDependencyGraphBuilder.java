@@ -31,14 +31,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * MarkdownDependencyGraphBuilder is part of the general application functions in the reins architecture.
- * Constructs a dependency graph by extracting markdown references and resolving relative paths.
+ * MarkdownDependencyGraphBuilder constructs a dependency graph by extracting markdown references and resolving paths against configured strategies.
  */
 public class MarkdownDependencyGraphBuilder {
-    /**
-     * VisitState is part of the general application functions in the reins architecture.
-     * Acts as a component managing visit state.
-     */
+
     private enum VisitState {
         WHITE,
         GRAY,
@@ -50,50 +46,39 @@ public class MarkdownDependencyGraphBuilder {
     private final Map<String, List<String>> resolutionDiagnostics = new LinkedHashMap<>();
     private final Map<String, List<String>> winningStrategies = new LinkedHashMap<>();
 
-    /**
-     * Constructs a new instance of {@link MarkdownDependencyGraphBuilder}.
-     */
     public MarkdownDependencyGraphBuilder() {
         this(new MarkdownReferenceExtractor(), new ReferenceResolverPipeline(List.of(
+                new NamedBaseReferenceResolutionStrategy(),
+                new RootBaseReferenceResolutionStrategy(),
                 new RelativeReferenceResolutionStrategy(),
-                new TestToMainFallbackResolutionStrategy()
+                new ContextualFallbackReferenceResolutionStrategy()
         )));
     }
 
-    /**
-     * Constructs a new instance of {@link MarkdownDependencyGraphBuilder}.
-     *
-     * @param referenceExtractor the reference extractor
-     */
     public MarkdownDependencyGraphBuilder(MarkdownReferenceExtractor referenceExtractor) {
         this(referenceExtractor, new ReferenceResolverPipeline(List.of(
+                new NamedBaseReferenceResolutionStrategy(),
+                new RootBaseReferenceResolutionStrategy(),
                 new RelativeReferenceResolutionStrategy(),
-                new TestToMainFallbackResolutionStrategy()
+                new ContextualFallbackReferenceResolutionStrategy()
         )));
     }
 
-    /**
-     * Constructs a new instance of {@link MarkdownDependencyGraphBuilder}.
-     *
-     * @param referenceExtractor the reference extractor
-     * @param resolverPipeline the resolver pipeline
-     */
     public MarkdownDependencyGraphBuilder(MarkdownReferenceExtractor referenceExtractor,
                                           ReferenceResolverPipeline resolverPipeline) {
         this.referenceExtractor = referenceExtractor;
         this.resolverPipeline = resolverPipeline;
     }
 
-    /**
-     * Builds the configured target.
-     *
-     * @param scannedFiles the scanned files
-     * @param projectRoot the root path of the project
-     * @param validator the path validator for security boundary checks
-     * @return the resolved or constructed object
-     */
     public MarkdownDependencyGraph build(List<File> scannedFiles,
                                          Path projectRoot,
+                                         PathValidator validator) throws IOException {
+        return build(scannedFiles, projectRoot, Map.of(), validator);
+    }
+
+    public MarkdownDependencyGraph build(List<File> scannedFiles,
+                                         Path projectRoot,
+                                         Map<String, Path> sourceBases,
                                          PathValidator validator) throws IOException {
         resolutionDiagnostics.clear();
         winningStrategies.clear();
@@ -108,7 +93,7 @@ public class MarkdownDependencyGraphBuilder {
         Map<String, List<String>> reverseEdges = new LinkedHashMap<>();
 
         Deque<String> pending = initializeNodes(sortedFiles, projectRoot, validator, nodes, relativeByAbsolute, edges, reverseEdges);
-        buildEdges(pending, projectRoot, validator, nodes, relativeByAbsolute, edges, reverseEdges);
+        buildEdges(pending, projectRoot, sourceBases, validator, nodes, relativeByAbsolute, edges, reverseEdges);
         detectCycles(edges);
 
         List<String> roots = collectRoots(reverseEdges);
@@ -136,6 +121,7 @@ public class MarkdownDependencyGraphBuilder {
 
     private void buildEdges(Deque<String> pending,
                              Path projectRoot,
+                             Map<String, Path> sourceBases,
                              PathValidator validator,
                              Map<String, MarkdownSourceNode> nodes,
                              Map<Path, String> relativeByAbsolute,
@@ -151,7 +137,7 @@ public class MarkdownDependencyGraphBuilder {
             reverseEdges.computeIfAbsent(sourcePath, key -> new ArrayList<>());
 
             for (String rawReference : node.outboundRefs()) {
-                resolveAndAddEdge(sourcePath, rawReference, projectRoot, validator,
+                resolveAndAddEdge(sourcePath, rawReference, projectRoot, sourceBases, validator,
                         nodes, relativeByAbsolute, edges, reverseEdges, pending);
             }
         }
@@ -160,6 +146,7 @@ public class MarkdownDependencyGraphBuilder {
     private void resolveAndAddEdge(String sourcePath,
                                     String rawReference,
                                     Path projectRoot,
+                                    Map<String, Path> sourceBases,
                                     PathValidator validator,
                                     Map<String, MarkdownSourceNode> nodes,
                                     Map<Path, String> relativeByAbsolute,
@@ -169,8 +156,8 @@ public class MarkdownDependencyGraphBuilder {
         try {
             ResolverContext resolverContext = new ResolverContext(
                     projectRoot,
-                    projectRoot.resolve(ProjectDirectoryPaths.MAIN_NL_ROOT).normalize(),
-                    List.of("relative", "test-to-main-fallback"),
+                    sourceBases,
+                    List.of("named-base-scheme", "root-base-relative", "relative", "contextual-fallback"),
                     validator,
                     relativeByAbsolute
             );
@@ -373,5 +360,4 @@ public class MarkdownDependencyGraphBuilder {
         stack.removeLast();
         states.put(node, VisitState.BLACK);
     }
-
 }

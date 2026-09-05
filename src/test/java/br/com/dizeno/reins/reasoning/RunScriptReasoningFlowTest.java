@@ -69,6 +69,7 @@ class RunScriptReasoningFlowTest {
         );
 
         ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
         config.getGemini().setApiKey("test-key");
         Files.createDirectories(tempDir.resolve("scripts"));
         config.getReasoning().setScriptsPath("scripts");
@@ -110,6 +111,7 @@ class RunScriptReasoningFlowTest {
         ).withScriptEvaluator(evaluator);
 
         ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
         config.getGemini().setApiKey("test-key");
         config.setFailOnError(false);
         config.getReasoning().setScriptsPath("scripts");
@@ -126,7 +128,7 @@ class RunScriptReasoningFlowTest {
 
         when(inferenceService.infer(any(), any())).thenReturn(
             response("INTENT: waiting-for-next-message\nCONTENT_TYPE: tool-request\n\n"
-                + "operation: run_script\nscript: compile-one-java.sh\nargs: [\"com/example/Broken.java\"]\n"),
+                + "operation: run_script\nscript: run-build.sh\nargs: [\"com/example/Broken.java\"]\n"),
             response("INTENT: waiting-for-next-message\nCONTENT_TYPE: tool-request\n\n"
                 + "- operation: add_reasoning_note\n"
                 + "  compiled: target:main/java/com/example/OtherFile.java\n"
@@ -134,20 +136,18 @@ class RunScriptReasoningFlowTest {
                 + "- operation: patch_file\n"
                 + "  base: target\n"
                 + "  path: main/java/com/example/Broken.java\n"
-                + "  atLine: 1\n"
-                + "  replacing: 0\n"
-                + "  content: \"package com.example;\\n\"\n"),
+                + "  content: \"@@ -1 +1 @@\\n-old\\n+package com.example;\\n\"\n"),
             response("INTENT: finish-success\nCONTENT_TYPE: message-to-user\n\nDone"));
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult compileError = br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.error(
             br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.RUN_SCRIPT,
-            "script:compile-one-java.sh",
+            "script:run-build.sh",
             "compile failed");
         compileError.setStdout("target/main/java/com/example/Broken.java:[12,8] cannot find symbol\n");
 
         when(toolService.execute(any(), any(), any(), any())).thenReturn(
             compileError,
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.success(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.ADD_INFERENCE_NOTE,
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.success(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.ADD_REASONING_NOTE,
                 "target:main/java/com/example/OtherFile.java", "note-added"),
             br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.success(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.PATCH_FILE,
                 "target:main/java/com/example/Broken.java", "patched"));
@@ -163,6 +163,7 @@ class RunScriptReasoningFlowTest {
         );
 
         ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
         config.getGemini().setApiKey("test-key");
         Files.createDirectories(tempDir.resolve("scripts"));
         config.getReasoning().setScriptsPath("scripts");

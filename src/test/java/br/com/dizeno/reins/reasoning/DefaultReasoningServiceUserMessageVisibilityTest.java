@@ -340,6 +340,7 @@ class DefaultReasoningServiceUserMessageVisibilityTest {
 
     private ReinsConfig configWithMaxTurns(int maxTurns) {
         ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
         ReasoningSettings settings = new ReasoningSettings();
         settings.setEnabled(true);
         settings.setMaxTurns(maxTurns);

@@ -46,16 +46,19 @@ public class InitializeCyclePhase implements ReasoningPhase {
         cycle.setBaseMappings(context.getRequest().getBaseMappings());
         cycle.setMaxTurns(coordinator.configResolver.resolveMaxTurns(context.getConfig()));
         
-        coordinator.cycleStateManager.ensureFixedProvider(cycle,
-            (context.getConfig().getProvider() == null || context.getConfig().getProvider().isBlank())
-                ? "gemini"
-                : context.getConfig().getProvider().trim().toLowerCase());
+        String provider = context.getConfig() != null ? context.getConfig().getProvider() : null;
+        if (provider == null || provider.isBlank()) {
+            throw new IllegalStateException("Provider is not configured");
+        }
+        coordinator.cycleStateManager.ensureFixedProvider(cycle, provider.trim().toLowerCase());
 
         if (coordinator.configResolver.isReasoningLogEnabled(context.getConfig())) {
             try {
+                String sourcePath = context.getRequest() != null ? context.getRequest().getSourcePath() : null;
                 var cycleLog = coordinator.inferenceLogService.initializeCycleLog(
                         cycle.getCycleId(),
-                        context.getProjectRoot()
+                        context.getProjectRoot(),
+                        sourcePath
                 );
                 context.setCycleLog(cycleLog);
                 coordinator.cycleStateManager.emitLifecycleMessage(

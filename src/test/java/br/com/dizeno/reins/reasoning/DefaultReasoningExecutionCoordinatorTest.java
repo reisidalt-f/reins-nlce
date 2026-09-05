@@ -61,6 +61,19 @@ class DefaultReasoningExecutionCoordinatorTest {
     }
 
     @Test
+    void formatsMutationBlockedMessageWhenAddReasoningNotesDisabled() {
+        ReferenceMutationDecision decision = ReferenceMutationDecision.blockReferencedSource(2, 1);
+
+        String message = DefaultReasoningExecutionCoordinator.formatReferenceMutationBlockedMessage(
+                "reason=" + decision.getReasonCode() + " ignoredSelfReferences=" + decision.getIgnoredSelfReferences(), false);
+
+        assertTrue(message.contains("Mutation of artifacts compiled by referenced markdown is not allowed."));
+        assertTrue(!message.contains("add_reasoning_note"));
+        assertTrue(message.contains("Describe the reason for the block and what needs to change in your final response message."));
+        assertTrue(message.contains("BLOCK_REFERENCED_SOURCE"));
+    }
+
+    @Test
     void formatsMutationBlockedLogFieldsWithReasonCodeAndIgnoredCount() {
         ReferenceMutationDecision decision = ReferenceMutationDecision.blockReferencedCompiled(3, 1);
 

@@ -85,7 +85,7 @@ public class PromptAssemblyService {
                 inspectedPaths,
                 compiledPaths,
                 attachments,
-                request != null && request.isProjectInferenceCycle());
+                false);
         if (baseContext == null) {
             throw new IllegalStateException("Unable to build script context for step '" + step + "'.");
         }
@@ -142,7 +142,7 @@ public class PromptAssemblyService {
                 inspectedPaths,
                 compiledPaths,
                 attachments,
-                request != null && request.isProjectInferenceCycle());
+                false);
         if (baseContext == null) {
             throw new IllegalStateException("Unable to build script context for system-context phase.");
         }
@@ -276,7 +276,7 @@ public class PromptAssemblyService {
                 inspectedPaths,
                 compiledPaths,
                 attachments,
-                request != null && request.isProjectInferenceCycle());
+                false);
         if (baseContext == null) {
             return null;
         }
@@ -339,7 +339,7 @@ public class PromptAssemblyService {
                 inspectedPaths,
                 compiledPaths,
                 attachments,
-                request != null && request.isProjectInferenceCycle());
+                false);
         if (baseContext == null) {
             return null;
         }
@@ -379,7 +379,7 @@ public class PromptAssemblyService {
                 inspectedPaths,
                 compiledPaths,
                 attachments,
-                request != null && request.isProjectInferenceCycle());
+                false);
         if (baseContext == null) {
             return null;
         }
@@ -419,7 +419,7 @@ public class PromptAssemblyService {
                 inspectedPaths,
                 compiledPaths,
                 attachments,
-                request != null && request.isProjectInferenceCycle());
+                false);
         if (baseContext == null) {
             return null;
         }
@@ -461,7 +461,7 @@ public class PromptAssemblyService {
                 inspectedPaths,
                 compiledPaths,
                 attachments,
-                request != null && request.isProjectInferenceCycle());
+                false);
         if (baseContext == null) {
             throw new IllegalStateException("Script context is required for tool-result rendering.");
         }

@@ -39,7 +39,8 @@ public class EagerlyProvideService {
      * Builds the configured target.
      *
      * @param priorRecord the prior record
-     * @param settings the settings
+     * @param settings the eagerly provide settings
+     * @param contextSettings the context settings
      * @param eagerlyProvidedLoggingEnabled the eagerly provided logging enabled
      * @param projectRoot the root path of the project
      * @param validator the path validator for security boundary checks
@@ -48,12 +49,14 @@ public class EagerlyProvideService {
      */
     public EagerlyProvideResult build(SourceTrackingRecord priorRecord,
                                       EagerlyProvideSettings settings,
+                                      ContextSettings contextSettings,
                                       boolean eagerlyProvidedLoggingEnabled,
                                       Path projectRoot,
                                       PathValidator validator,
                                       Log log) {
-        if (settings == null
-                || (!settings.isPreviouslyCompiledFiles() && !settings.isPreviouslyInspectedFiles())) {
+        boolean compiledFiles = contextSettings != null && contextSettings.isCompiledFiles();
+        boolean inspectedFiles = contextSettings != null && contextSettings.isInspectedFiles();
+        if (!compiledFiles && !inspectedFiles) {
             if (eagerlyProvidedLoggingEnabled) {
                 log.info("Eagerly provide disabled for both categories — skipping all prior-cycle file attachments");
             }
@@ -68,13 +71,13 @@ public class EagerlyProvideService {
         Path resolvedTargetRoot = resolveTargetRoot(priorRecord, projectRoot);
         String sourceCanonicalPath = priorRecord.getSourcePath();
         String sourceSimpleName = resolveSimpleName(sourceCanonicalPath);
-        if (settings.isPreviouslyCompiledFiles()) {
+        if (compiledFiles) {
             compiled = buildPayloads(priorRecord.getCompiledFiles(), "previously-compiled",
                 settings, eagerlyProvidedLoggingEnabled, projectRoot, resolvedTargetRoot, validator, log,
                 sourceCanonicalPath, sourceSimpleName);
             groups = List.of(new CompiledSourceGroup(sourceCanonicalPath, sourceSimpleName, compiled));
         }
-        if (settings.isPreviouslyInspectedFiles()) {
+        if (inspectedFiles) {
             inspected = buildPayloads(priorRecord.getInspectedFiles(), "previously-inspected",
                 settings, eagerlyProvidedLoggingEnabled, projectRoot, resolvedTargetRoot, validator, log,
                 sourceCanonicalPath, sourceSimpleName);
@@ -103,15 +106,16 @@ public class EagerlyProvideService {
                 log.warn("Eagerly provide: skipping " + PathLogFormatter.formatPath(storedReference, projectRoot) + " — " + ex.getMessage());
                 continue;
             }
-            if (reference.getBase() == br.com.dizeno.reins.source.domain.FileReferenceBase.SCRIPT) {
+            if ("script".equals(reference.getBaseName())) {
                 log.warn("Eagerly provide: skipping " + PathLogFormatter.formatPath(storedReference, projectRoot) + " — script base is not attachable");
                 continue;
             }
-            Path resolvedPath = reference.toAbsolutePath(resolvedBase -> switch (resolvedBase) {
-                case MAIN -> projectRoot.resolve("src/main/nl").normalize();
-                case TEST -> projectRoot.resolve("src/test/nl").normalize();
-                case TARGET -> targetRoot;
-                case SCRIPT -> throw new IllegalArgumentException("Script base is not supported for eager attachments.");
+            Path resolvedPath = reference.toAbsolutePathByBaseName(resolvedBase -> switch (resolvedBase) {
+                case "main" -> projectRoot.resolve("src/main/nl").normalize();
+                case "test" -> projectRoot.resolve("src/test/nl").normalize();
+                case "target" -> targetRoot;
+                case "script" -> throw new IllegalArgumentException("Script base is not supported for eager attachments.");
+                default -> projectRoot.resolve(resolvedBase).normalize();
             });
             try {
                 validator.validateInProject(resolvedPath);

@@ -70,17 +70,42 @@ public class ReinsCli {
             } else if ("clean".equals(command)) {
                 runner.clean(config, baseDir, log);
                 return 0;
-            } else if ("add-note".equals(command) || "addnote".equals(command)) {
-                String source = null;
+            } else if ("add-note".equals(command)) {
+                java.util.List<String> sourcesList = new java.util.ArrayList<>();
                 String note = null;
                 for (int i = 0; i < subArgs.length - 1; i++) {
                     if ("--source".equals(subArgs[i])) {
-                        source = subArgs[i + 1];
+                        sourcesList.add(subArgs[i + 1]);
+                        i++;
                     } else if ("--note".equals(subArgs[i])) {
                         note = subArgs[i + 1];
+                        i++;
                     }
                 }
+                String source = String.join(",", sourcesList);
                 runner.addNote(config, baseDir, source, note, ReasoningNote.Origin.CLI, log);
+                return 0;
+            } else if ("list-notes".equals(command)) {
+                java.util.List<String> sourcesList = new java.util.ArrayList<>();
+                for (int i = 0; i < subArgs.length; i++) {
+                    if ("--source".equals(subArgs[i]) && i + 1 < subArgs.length) {
+                        sourcesList.add(subArgs[i + 1]);
+                        i++;
+                    }
+                }
+                String source = sourcesList.isEmpty() ? null : String.join(",", sourcesList);
+                runner.listNotes(config, baseDir, source, log);
+                return 0;
+            } else if ("clear-notes".equals(command)) {
+                java.util.List<String> sourcesList = new java.util.ArrayList<>();
+                for (int i = 0; i < subArgs.length; i++) {
+                    if ("--source".equals(subArgs[i]) && i + 1 < subArgs.length) {
+                        sourcesList.add(subArgs[i + 1]);
+                        i++;
+                    }
+                }
+                String source = sourcesList.isEmpty() ? null : String.join(",", sourcesList);
+                runner.clearNotes(config, baseDir, source, log);
                 return 0;
             } else {
                 System.err.println("[ERROR] Unknown command: " + command);
@@ -105,14 +130,17 @@ public class ReinsCli {
         System.out.println("  compile      Compile instruction files");
         System.out.println("  clean        Clean up generated files and trackings");
         System.out.println("  add-note     Add a corrective note for a source file");
+        System.out.println("  list-notes   List reasoning notes for source files");
+        System.out.println("  clear-notes  Clear reasoning notes for source files");
         System.out.println();
         System.out.println("Options:");
         System.out.println("  --config <file>             Specify external configuration file (YAML, JSON, XML, Properties)");
-        System.out.println("  --provider <name>           LLM provider (gemini, ollama, stub)");
+        System.out.println("  --provider <name>           LLM provider (gemini, openai, ollama, stub)");
+        System.out.println("  --compilationThreads <N>    Number of simultaneous compilation threads (default: 1)");
         System.out.println("  --verbose                   Enable verbose logging");
         System.out.println("  --dryRun                    Perform dry run");
         System.out.println("  --failOnError               Fails immediately on any errors");
-        System.out.println("  --source <path>             Specify source path (required for add-note, optional for compile)");
+        System.out.println("  --source <path>             Specify source path(s), comma-separated or repeated (required for add-note; optional for compile, clean, list-notes, clear-notes)");
         System.out.println("  --note <text>               Specify note text (required for add-note)");
     }
 }

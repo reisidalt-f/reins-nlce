@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.Map;
 
  
+import br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver;
+
 /**
  * ScriptEvaluator is part of the dynamic script evaluation using Freemarker templates and context injection in the reins architecture.
  * Evaluates dynamic scripting logic using Freemarker templates and injects system/user variables.
@@ -34,6 +36,7 @@ public class ScriptEvaluator {
     private final ScriptRegistry registry;
     private final Log log;
     private final boolean scriptsEventsEnabled;
+    private final BasePathResolver basePathResolver;
 
     /**
      * Constructs a new instance of {@link ScriptEvaluator}.
@@ -42,7 +45,7 @@ public class ScriptEvaluator {
      * @param log the logger instance
      */
     public ScriptEvaluator(ScriptRegistry registry, Log log) {
-        this(registry, log, false);
+        this(registry, log, false, null);
     }
 
     /**
@@ -53,9 +56,32 @@ public class ScriptEvaluator {
      * @param scriptsEventsEnabled the inference scripts events enabled
      */
     public ScriptEvaluator(ScriptRegistry registry, Log log, boolean scriptsEventsEnabled) {
+        this(registry, log, scriptsEventsEnabled, null);
+    }
+
+    /**
+     * Constructs a new instance of {@link ScriptEvaluator}.
+     *
+     * @param registry the registry
+     * @param log the logger instance
+     * @param scriptsEventsEnabled the inference scripts events enabled
+     * @param basePathResolver the base path resolver instance
+     */
+    public ScriptEvaluator(ScriptRegistry registry, Log log, boolean scriptsEventsEnabled, BasePathResolver basePathResolver) {
         this.registry = registry;
         this.log = log;
         this.scriptsEventsEnabled = scriptsEventsEnabled;
+        this.basePathResolver = basePathResolver;
+    }
+
+    /**
+     * With Base Path Resolver.
+     *
+     * @param resolver the base path resolver instance
+     * @return a new ScriptEvaluator instance with the specified BasePathResolver
+     */
+    public ScriptEvaluator withBasePathResolver(BasePathResolver resolver) {
+        return new ScriptEvaluator(registry, log, scriptsEventsEnabled, resolver);
     }
 
      
@@ -308,6 +334,21 @@ public class ScriptEvaluator {
             Template template = descriptor.getTemplate();
             Map<String, Object> dataModel = new HashMap<>();
             dataModel.put("project", context);
+            if (context != null) {
+                if (context.getSource() != null) dataModel.put("source", context.getSource());
+                if (context.getFileBases() != null) dataModel.put("fileBases", context.getFileBases());
+                if (context.getPipeline() != null) dataModel.put("pipeline", context.getPipeline());
+                if (context.getPolicy() != null) dataModel.put("policy", context.getPolicy());
+                if (context.getConfig() != null) dataModel.put("config", context.getConfig());
+                if (context.getTracking() != null) dataModel.put("tracking", context.getTracking());
+                if (context.getCycle() != null) dataModel.put("cycle", context.getCycle());
+                if (context.getInference() != null) dataModel.put("inference", context.getInference());
+                if (context.getCurrentToolResult() != null) dataModel.put("currentToolResult", context.getCurrentToolResult());
+                if (context.getAttachments() != null) dataModel.put("attachments", context.getAttachments());
+            }
+            dataModel.put("readFile", new ReadFileMethod(basePathResolver, context));
+            dataModel.put("hasFile", new HasFileMethod(basePathResolver, context));
+            dataModel.put("readFileOrDefault", new ReadFileOrDefaultMethod(basePathResolver, context));
             if (variables != null && !variables.isEmpty()) {
                 dataModel.putAll(variables);
             }

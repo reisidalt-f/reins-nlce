@@ -24,73 +24,50 @@ import java.util.Map;
  */
 public class ResolverContext {
     private final Path projectRoot;
-    private final Path mainNlRoot;
+    private final Map<String, Path> sourceBases;
     private final List<String> strategyOrder;
     private final PathValidator pathValidator;
     private final Map<Path, String> knownSourcesByAbsolute;
 
-    /**
-     * Constructs a new instance of {@link ResolverContext}.
-     *
-     * @param projectRoot the root path of the project
-     * @param mainNlRoot the main nl root
-     * @param strategyOrder the strategy order
-     * @param pathValidator the path validator
-     * @param knownSourcesByAbsolute the known sources by absolute
-     */
     public ResolverContext(Path projectRoot,
-                           Path mainNlRoot,
+                           Map<String, Path> sourceBases,
                            List<String> strategyOrder,
                            PathValidator pathValidator,
                            Map<Path, String> knownSourcesByAbsolute) {
         this.projectRoot = projectRoot;
-        this.mainNlRoot = mainNlRoot;
-        this.strategyOrder = List.copyOf(strategyOrder);
+        this.sourceBases = new LinkedHashMap<>();
+        if (sourceBases != null) {
+            for (Map.Entry<String, Path> e : sourceBases.entrySet()) {
+                if (e.getKey() != null && e.getValue() != null) {
+                    this.sourceBases.put(e.getKey().toLowerCase(java.util.Locale.ROOT), e.getValue().toAbsolutePath().normalize());
+                }
+            }
+        }
+        this.strategyOrder = strategyOrder != null ? List.copyOf(strategyOrder) : List.of();
         this.pathValidator = pathValidator;
-        this.knownSourcesByAbsolute = new LinkedHashMap<>(knownSourcesByAbsolute);
+        this.knownSourcesByAbsolute = knownSourcesByAbsolute != null ? new LinkedHashMap<>(knownSourcesByAbsolute) : Map.of();
     }
 
-    /**
-     * Gets the project root.
-     *
-     * @return the resolved or constructed object
-     */
     public Path getProjectRoot() {
         return projectRoot;
     }
 
-    /**
-     * Gets the main nl root.
-     *
-     * @return the resolved or constructed object
-     */
-    public Path getMainNlRoot() {
-        return mainNlRoot;
+    public Map<String, Path> getSourceBases() {
+        return sourceBases;
     }
 
-    /**
-     * Gets the strategy order.
-     *
-     * @return the string result
-     */
+    public Path getSourceBase(String name) {
+        return name == null ? null : sourceBases.get(name.toLowerCase(java.util.Locale.ROOT));
+    }
+
     public List<String> getStrategyOrder() {
         return strategyOrder;
     }
 
-    /**
-     * Gets the path validator.
-     *
-     * @return the resolved or constructed object
-     */
     public PathValidator getPathValidator() {
         return pathValidator;
     }
 
-    /**
-     * Gets the known sources by absolute.
-     *
-     * @return the string result
-     */
     public Map<Path, String> getKnownSourcesByAbsolute() {
         return knownSourcesByAbsolute;
     }

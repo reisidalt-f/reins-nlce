@@ -13,257 +13,428 @@ package br.com.dizeno.reins.reasoning.tooling;
 
 import br.com.dizeno.reins.source.domain.FileReference;
 
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.error.YAMLException;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * ToolExecutionRequest is part of the tool execution environments (like MCP tools and local file tools) exposed to LLMs in the reins architecture.
+ * ToolExecutionRequest is part of the tool execution environments (like tools and local file tools) exposed to LLMs in the reins architecture.
  * Acts as a component managing tool execution request.
  */
 public class ToolExecutionRequest {
-    /**
-     * Operation is part of the tool execution environments (like MCP tools and local file tools) exposed to LLMs in the reins architecture.
-     * Acts as a component managing operation.
-     */
     public enum Operation {
         LIST_FILES,
         READ_FILE,
         WRITE_FILE,
         PATCH_FILE,
         DELETE_FILE,
+        APPEND_FILE,
+        PREPEND_FILE,
+        MOVE_FILE,
+        COPY_FILE,
         LIST_COMPILED_FILES,
         RUN_SCRIPT,
-        ADD_INFERENCE_NOTE,
-        CLEAR_INFERENCE_NOTES
+        ADD_REASONING_NOTE,
+        CLEAR_REASONING_NOTES,
+        LIST_REASONING_NOTES
     }
 
     private Operation operation;
     private String base;
     private String path;
+    private String destination;
     private String script;
     private String intent;
     private boolean recursive;
     private String content;
-    private Integer atLine;
-    private Integer replacing;
+    private boolean base64;
     private boolean createParents = true;
     private List<String> args = List.of();
-     
     private String source;
-     
     private String compiled;
-     
     private String note;
 
-    /**
-     * From Yaml.
-     *
-     * @param yamlBody the yaml body
-     * @return the resolved or constructed object
-     */
-    public static ToolExecutionRequest fromYaml(String yamlBody) {
-        List<ToolExecutionRequest> parsed = fromYamlAny(yamlBody);
+    public static ToolExecutionRequest fromText(String body) {
+        List<ToolExecutionRequest> parsed = fromTextAny(body);
         if (parsed.size() != 1) {
             throw new IllegalArgumentException("tool request must contain exactly one operation.");
         }
         return parsed.get(0);
     }
 
-    private static final Pattern BLOCK_SCALAR_START = Pattern.compile(
-            "^([ \\t]*)([a-zA-Z0-9_-]+):[ \\t]*([|>]\\d*[+-]?|\\d*[+-]?[|>])[ \\t]*$"
-    );
-
-    private static final Pattern BLOCK_SCALAR_TERMINATOR = Pattern.compile(
-            "^[ \\t]*(?:-?[ \\t]*(?:operation|base|path|script|intent|recursive|content|atLine|replacing|createParents|args|source|compiled|note):|---|```|\"\"\")",
-            Pattern.CASE_INSENSITIVE
-    );
-
-    private static final Pattern ROOT_FENCE = Pattern.compile(
-            "^[ \\t]*(?:```|\"\"\")[ \\t]*$"
-    );
-
-    private static int getLeadingWhitespaceLength(String line) {
-        int count = 0;
-        while (count < line.length() && (line.charAt(count) == ' ' || line.charAt(count) == '\t')) {
-            count++;
-        }
-        return count;
+    public static ToolExecutionRequest fromYaml(String body) {
+        return fromText(body);
     }
 
-    /**
-     * Preprocess Yaml Block Scalars.
-     *
-     * @param yamlBody the yaml body
-     * @return the string result
-     */
-    public static String preprocessYamlBlockScalars(String yamlBody) {
-        if (yamlBody == null) {
-            return null;
-        }
-        String[] lines = yamlBody.split("\\r?\\n", -1);
-        StringBuilder sb = new StringBuilder();
-        int i = 0;
-        while (i < lines.length) {
-            String line = lines[i];
-            if (ROOT_FENCE.matcher(line).matches()) {
-                i++;
-                continue;
-            }
-            Matcher m = BLOCK_SCALAR_START.matcher(line);
-            if (m.matches()) {
-                sb.append(line);
-                if (i < lines.length - 1) {
-                    sb.append("\n");
-                }
-                int keyIndent = m.group(1).length();
-                int targetIndent = keyIndent + 2;
-                List<String> blockLines = new ArrayList<>();
-                i++;
-                while (i < lines.length) {
-                    String blockLine = lines[i];
-                    int lineIndent = getLeadingWhitespaceLength(blockLine);
-                    boolean hasContent = !blockLine.trim().isEmpty();
-                    if (hasContent && lineIndent <= keyIndent && BLOCK_SCALAR_TERMINATOR.matcher(blockLine).find()) {
-                        break;
-                    }
-                    blockLines.add(blockLine);
-                    i++;
-                }
-
-                
-                int start = -1;
-                int end = -1;
-                for (int j = 0; j < blockLines.size(); j++) {
-                    String bl = blockLines.get(j);
-                    if (!bl.trim().isEmpty()) {
-                        int lineIndent = getLeadingWhitespaceLength(bl);
-                        if (lineIndent < targetIndent) {
-                            if (start == -1) {
-                                start = j;
-                            }
-                            end = j;
-                        }
-                    }
-                }
-
-                if (start != -1) {
-                    
-                    int minIndent = Integer.MAX_VALUE;
-                    for (int j = start; j <= end; j++) {
-                        String bl = blockLines.get(j);
-                        if (!bl.trim().isEmpty()) {
-                            minIndent = Math.min(minIndent, getLeadingWhitespaceLength(bl));
-                        }
-                    }
-                    if (minIndent != Integer.MAX_VALUE && minIndent < targetIndent) {
-                        int shift = targetIndent - minIndent;
-                        String padding = " ".repeat(shift);
-                        for (int j = start; j <= end; j++) {
-                            String bl = blockLines.get(j);
-                            if (!bl.trim().isEmpty()) {
-                                blockLines.set(j, padding + bl);
-                            }
-                        }
-                    }
-                }
-
-                
-                for (int j = 0; j < blockLines.size(); j++) {
-                    sb.append(blockLines.get(j));
-                    if (i < lines.length || j < blockLines.size() - 1) {
-                        sb.append("\n");
-                    }
-                }
-            } else {
-                sb.append(line);
-                if (i < lines.length - 1) {
-                    sb.append("\n");
-                }
-                i++;
-            }
-        }
-        String result = sb.toString();
-        if (!result.endsWith("\n")) {
-            result += "\n";
-        }
-        return result;
+    public static List<ToolExecutionRequest> fromYamlAny(String body) {
+        return fromTextAny(body);
     }
 
-    /**
-     * From Yaml Any.
-     *
-     * @param yamlBody the yaml body
-     * @return the collection of elements
-     */
-    public static List<ToolExecutionRequest> fromYamlAny(String yamlBody) {
-        String preprocessed = preprocessYamlBlockScalars(yamlBody);
+    public static List<ToolExecutionRequest> fromTextAny(String body) {
+        if (body == null || body.isBlank()) {
+            throw new IllegalArgumentException("tool request body must not be null or blank.");
+        }
+
         List<ToolExecutionRequest> requests = new ArrayList<>();
-        try {
-            for (Object loaded : new Yaml().loadAll(preprocessed)) {
-                if (loaded instanceof Map<?, ?> map) {
-                    requests.add(fromMap(map));
-                } else if (loaded instanceof List<?> list) {
-                    for (Object item : list) {
-                        if (!(item instanceof Map<?, ?> mapItem)) {
-                            throw new IllegalArgumentException("tool request list entries must be YAML objects.");
-                        }
-                        requests.add(fromMap(mapItem));
+
+        if (body.contains("--reins-boundary")) {
+            String[] parts = body.split("(?m)^--reins-boundary(?:--)?\\s*$");
+            for (String part : parts) {
+                String trimmedPart = part.trim();
+                if (!trimmedPart.isEmpty()) {
+                    ToolExecutionRequest req = fromPart(trimmedPart);
+                    if (req != null) {
+                        requests.add(req);
                     }
-                } else if (loaded != null) {
-                    throw new IllegalArgumentException("tool request must be a YAML object or list of objects.");
                 }
             }
-        } catch (YAMLException ex) {
-            throw new IllegalArgumentException(
-                    "Invalid tool YAML payload. Ensure string values are properly quoted (especially when containing ':'), use escaped newlines (\\n) inside quoted strings when needed, and rely on default YAML indentation logic for block scalars (content: |) where all lines are indented relative to the outer mapping (no unindented lines like closing braces `}` at column 1, and no closing quotes or symbols at the end). "
-                            + ex.getMessage(),
-                    ex);
+        } else {
+            List<ToolExecutionRequest> legacyBlocks = fromConsecutiveOperationBlocks(body);
+            if (!legacyBlocks.isEmpty()) {
+                requests.addAll(legacyBlocks);
+            } else {
+                ToolExecutionRequest single = fromPart(body.trim());
+                if (single != null) {
+                    requests.add(single);
+                }
+            }
         }
+
         if (requests.isEmpty()) {
-            throw new IllegalArgumentException("tool request must be a YAML object or list of objects.");
+            throw new IllegalArgumentException("Invalid tool request payload. Could not parse any valid operation.");
         }
         return requests;
     }
 
-    private static ToolExecutionRequest fromMap(Map<?, ?> map) {
+    private static List<ToolExecutionRequest> fromConsecutiveOperationBlocks(String body) {
+        Pattern OPERATION_START = Pattern.compile("(?m)^-?[ \\t]*operation:\\s*");
+        Matcher matcher = OPERATION_START.matcher(body);
+        List<Integer> starts = new ArrayList<>();
+        while (matcher.find()) {
+            starts.add(matcher.start());
+        }
+        if (starts.size() <= 1) {
+            return List.of();
+        }
 
-        ToolExecutionRequest request = new ToolExecutionRequest();
-        request.setOperation(parseOperation(stringValue(map.get("operation"))));
-        request.setBase(stringValue(map.get("base")));
-        request.setPath(stringValue(map.get("path")));
-        request.setScript(stringValue(map.get("script")));
-        request.setIntent(stringValue(map.get("intent")));
-        request.setRecursive(booleanValue(map.get("recursive"), false));
-        request.setContent(stringValue(map.get("content")));
-        
-        for (String deprecated : new String[]{"mode", "startLine", "startColumn", "endLine", "endColumn"}) {
-            if (map.containsKey(deprecated)) {
-                throw new IllegalArgumentException(
-                    "patch_file parameter '" + deprecated + "' is no longer supported. "
-                    + "Use atLine (1-based line number) and replacing (number of lines to remove, default 0) instead.");
+        List<ToolExecutionRequest> requests = new ArrayList<>();
+        for (int i = 0; i < starts.size(); i++) {
+            int start = starts.get(i);
+            int end = (i + 1 < starts.size()) ? starts.get(i + 1) : body.length();
+            String chunk = body.substring(start, end).trim();
+            if (!chunk.isBlank()) {
+                ToolExecutionRequest req = fromPart(chunk);
+                if (req != null) {
+                    requests.add(req);
+                }
             }
         }
-        request.setAtLine(intValue(map.get("atLine")));
-        request.setReplacing(intValue(map.get("replacing")));
-        request.setCreateParents(booleanValue(map.get("createParents"), true));
-        request.setArgs(argsValue(map.get("args"), request.getOperation()));
-        request.setSource(stringValue(map.get("source")));
-        request.setCompiled(stringValue(map.get("compiled")));
-        request.setNote(stringValue(map.get("note")));
+        return requests;
+    }
 
-        validate(request);
-        return request;
+    public static ToolExecutionRequest fromPart(String partBody) {
+        if (partBody == null || partBody.isBlank()) {
+            return null;
+        }
+
+        String[] lines = partBody.split("\\r?\\n", -1);
+
+        int cmdLineIdx = -1;
+        for (int i = 0; i < lines.length; i++) {
+            if (!lines[i].trim().isEmpty()) {
+                cmdLineIdx = i;
+                break;
+            }
+        }
+        if (cmdLineIdx == -1) {
+            return null;
+        }
+
+        String cmdLine = lines[cmdLineIdx].trim();
+        String lowerCmd = cmdLine.toLowerCase(Locale.ROOT);
+
+        if (lowerCmd.startsWith("operation:") || lowerCmd.startsWith("- operation:") || lowerCmd.startsWith("-operation:")) {
+            return fromKeyValueLines(lines, cmdLineIdx);
+        }
+
+        List<String> tokens = tokenizeCommandLine(cmdLine);
+        if (tokens.isEmpty()) {
+            return null;
+        }
+
+        ToolExecutionRequest req = new ToolExecutionRequest();
+        Operation op = parseOperation(tokens.get(0));
+        req.setOperation(op);
+
+        boolean isBase64Header = false;
+        int payloadStartIdx = cmdLineIdx + 1;
+
+        while (payloadStartIdx < lines.length) {
+            String line = lines[payloadStartIdx].trim();
+            if (line.isEmpty()) {
+                payloadStartIdx++;
+                break;
+            }
+            if (line.toLowerCase(Locale.ROOT).startsWith("content-transfer-encoding:")
+                    && line.toLowerCase(Locale.ROOT).contains("base64")) {
+                isBase64Header = true;
+                payloadStartIdx++;
+            } else {
+                break;
+            }
+        }
+
+        switch (op) {
+            case READ_FILE, LIST_COMPILED_FILES, DELETE_FILE -> {
+                if (tokens.size() >= 2) req.setBase(tokens.get(1));
+                if (tokens.size() >= 3) req.setPath(tokens.get(2));
+                if (tokens.size() >= 4) req.setIntent(joinTokens(tokens, 3));
+            }
+            case LIST_FILES -> {
+                if (tokens.size() >= 2) req.setBase(tokens.get(1));
+                if (tokens.size() >= 3) req.setPath(tokens.get(2));
+                int intentStart = 3;
+                if (tokens.size() >= 4) {
+                    String arg3 = tokens.get(3);
+                    if ("true".equalsIgnoreCase(arg3) || "false".equalsIgnoreCase(arg3) || "recursive".equalsIgnoreCase(arg3)) {
+                        req.setRecursive("true".equalsIgnoreCase(arg3) || "recursive".equalsIgnoreCase(arg3));
+                        intentStart = 4;
+                    }
+                }
+                if (tokens.size() > intentStart) req.setIntent(joinTokens(tokens, intentStart));
+            }
+            case WRITE_FILE, APPEND_FILE, PREPEND_FILE -> {
+                if (tokens.size() >= 2) req.setBase(tokens.get(1));
+                if (tokens.size() >= 3) req.setPath(tokens.get(2));
+                int intentStart = 3;
+                if (tokens.size() >= 4 && "base64".equalsIgnoreCase(tokens.get(3))) {
+                    req.setBase64(true);
+                    intentStart = 4;
+                }
+                if (isBase64Header) {
+                    req.setBase64(true);
+                }
+                if (tokens.size() > intentStart) req.setIntent(joinTokens(tokens, intentStart));
+                req.setContent(extractPayload(lines, payloadStartIdx));
+            }
+            case MOVE_FILE, COPY_FILE -> {
+                if (tokens.size() >= 2) req.setBase(tokens.get(1));
+                if (tokens.size() >= 3) req.setPath(tokens.get(2));
+                if (tokens.size() >= 4) req.setDestination(tokens.get(3));
+                if (tokens.size() >= 5) req.setIntent(joinTokens(tokens, 4));
+            }
+            case PATCH_FILE -> {
+                if (tokens.size() >= 2) req.setBase(tokens.get(1));
+                if (tokens.size() >= 3) req.setPath(tokens.get(2));
+                if (tokens.size() >= 4) req.setIntent(joinTokens(tokens, 3));
+                req.setContent(extractPayload(lines, payloadStartIdx));
+            }
+            case RUN_SCRIPT -> {
+                if (tokens.size() >= 2) req.setScript(tokens.get(1));
+                if (tokens.size() >= 3) {
+                    int intentIdx = -1;
+                    for (int i = 2; i < tokens.size(); i++) {
+                        if ("--intent".equalsIgnoreCase(tokens.get(i))) {
+                            intentIdx = i;
+                            break;
+                        }
+                    }
+                    if (intentIdx != -1) {
+                        req.setArgs(tokens.subList(2, intentIdx));
+                        if (intentIdx + 1 < tokens.size()) {
+                            req.setIntent(joinTokens(tokens, intentIdx + 1));
+                        }
+                    } else {
+                        req.setArgs(tokens.subList(2, tokens.size()));
+                    }
+                }
+                if (req.getIntent() == null && payloadStartIdx < lines.length) {
+                    String nextLine = lines[payloadStartIdx].trim();
+                    if (nextLine.toLowerCase(Locale.ROOT).startsWith("intent:")) {
+                        req.setIntent(nextLine.substring(7).trim());
+                    }
+                }
+            }
+            case ADD_REASONING_NOTE -> {
+                if (tokens.size() >= 3) {
+                    String targetType = tokens.get(1).toLowerCase(Locale.ROOT);
+                    if ("compiled".equals(targetType)) {
+                        req.setCompiled(tokens.get(2));
+                    } else {
+                        req.setSource(tokens.get(2));
+                    }
+                }
+                if (tokens.size() >= 4) {
+                    req.setIntent(joinTokens(tokens, 3));
+                }
+                String noteText = extractPayload(lines, payloadStartIdx);
+                if (noteText != null && !noteText.isBlank()) {
+                    req.setNote(noteText.trim());
+                }
+            }
+            case CLEAR_REASONING_NOTES -> {
+                if (tokens.size() >= 2) req.setSource(tokens.get(1));
+                if (tokens.size() >= 3) req.setIntent(joinTokens(tokens, 2));
+            }
+            case LIST_REASONING_NOTES -> {
+                if (tokens.size() >= 2) req.setSource(tokens.get(1));
+                if (tokens.size() >= 3) req.setIntent(joinTokens(tokens, 2));
+            }
+        }
+
+        validate(req);
+        return req;
+    }
+
+    private static ToolExecutionRequest fromKeyValueLines(String[] lines, int startIdx) {
+        String opVal = null;
+        String baseVal = null;
+        String pathVal = null;
+        String destinationVal = null;
+        String scriptVal = null;
+        String intentVal = null;
+        String contentVal = null;
+        String noteVal = null;
+        String sourceVal = null;
+        String compiledVal = null;
+        boolean recVal = false;
+        boolean b64Val = false;
+
+        StringBuilder contentBuf = new StringBuilder();
+        boolean inContent = false;
+
+        for (int i = startIdx; i < lines.length; i++) {
+            String line = lines[i];
+            if (inContent) {
+                contentBuf.append(line).append("\n");
+                continue;
+            }
+            int colonIdx = line.indexOf(':');
+            if (colonIdx > 0) {
+                String rawKey = line.substring(0, colonIdx).trim().replaceFirst("^-\\s*", "");
+                String key = rawKey.toLowerCase(Locale.ROOT);
+                String val = line.substring(colonIdx + 1).trim();
+
+                boolean isQuoted = (val.startsWith("\"") && val.endsWith("\"") && val.length() >= 2)
+                        || (val.startsWith("'") && val.endsWith("'") && val.length() >= 2);
+
+                if (!isQuoted && !val.startsWith("|")) {
+                    if (val.contains(": ") || ("content".equals(key) || "patch".equals(key)) && val.contains(":")) {
+                        throw new IllegalArgumentException("Invalid tool YAML payload. Unquoted colon in value.");
+                    }
+                }
+
+                if (isQuoted) {
+                    val = val.substring(1, val.length() - 1);
+                }
+                switch (key) {
+                    case "mode", "startline", "startcolumn", "endline", "endcolumn", "atline", "replacing" ->
+                        throw new IllegalArgumentException("'" + rawKey + "' is deprecated and no longer supported.");
+                    case "operation" -> opVal = val;
+                    case "base" -> baseVal = val;
+                    case "path" -> pathVal = val;
+                    case "destination", "dest", "destinationpath", "targetpath" -> destinationVal = val;
+                    case "script" -> scriptVal = val;
+                    case "intent" -> intentVal = val;
+                    case "recursive" -> recVal = Boolean.parseBoolean(val);
+                    case "base64" -> b64Val = Boolean.parseBoolean(val);
+                    case "source" -> sourceVal = val;
+                    case "compiled" -> compiledVal = val;
+                    case "note" -> noteVal = val;
+                    case "content", "patch" -> {
+                        if (val.startsWith("|") || val.isEmpty()) {
+                            inContent = true;
+                        } else {
+                            contentVal = val;
+                        }
+                    }
+                }
+            }
+        }
+        if (inContent) {
+            contentVal = contentBuf.toString();
+        }
+
+        ToolExecutionRequest req = new ToolExecutionRequest();
+        req.setOperation(parseOperation(opVal));
+        req.setBase(baseVal);
+        req.setPath(pathVal);
+        req.setDestination(destinationVal);
+        req.setScript(scriptVal);
+        req.setIntent(intentVal);
+        req.setRecursive(recVal);
+        req.setContent(contentVal);
+        req.setBase64(b64Val);
+        req.setSource(sourceVal);
+        req.setCompiled(compiledVal);
+        req.setNote(noteVal);
+        validate(req);
+        return req;
+    }
+
+    public static List<String> tokenizeCommandLine(String line) {
+        List<String> tokens = new ArrayList<>();
+        if (line == null || line.isBlank()) {
+            return tokens;
+        }
+        StringBuilder current = new StringBuilder();
+        boolean inQuotes = false;
+        char quoteChar = 0;
+
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (inQuotes) {
+                if (c == quoteChar) {
+                    inQuotes = false;
+                } else {
+                    current.append(c);
+                }
+            } else {
+                if (c == '"' || c == '\'') {
+                    inQuotes = true;
+                    quoteChar = c;
+                } else if (Character.isWhitespace(c)) {
+                    if (current.length() > 0) {
+                        tokens.add(current.toString());
+                        current.setLength(0);
+                    }
+                } else {
+                    current.append(c);
+                }
+            }
+        }
+        if (current.length() > 0) {
+            tokens.add(current.toString());
+        }
+        return tokens;
+    }
+
+    private static String joinTokens(List<String> tokens, int startIndex) {
+        if (startIndex >= tokens.size()) {
+            return null;
+        }
+        return String.join(" ", tokens.subList(startIndex, tokens.size()));
+    }
+
+    private static String extractPayload(String[] lines, int startIdx) {
+        if (startIdx >= lines.length) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = startIdx; i < lines.length; i++) {
+            sb.append(lines[i]);
+            if (i < lines.length - 1) {
+                sb.append("\n");
+            }
+        }
+        return sb.toString();
     }
 
     private static boolean isNoteOperation(Operation op) {
-        return op == Operation.ADD_INFERENCE_NOTE || op == Operation.CLEAR_INFERENCE_NOTES;
+        return op == Operation.ADD_REASONING_NOTE || op == Operation.CLEAR_REASONING_NOTES || op == Operation.LIST_REASONING_NOTES;
     }
 
     private static boolean isQualifiedPath(String value) {
@@ -278,10 +449,10 @@ public class ToolExecutionRequest {
         if (request.getOperation() == null) {
             throw new IllegalArgumentException("tool request operation is required.");
         }
-        
+
         if (isNoteOperation(request.getOperation())) {
             switch (request.getOperation()) {
-                case ADD_INFERENCE_NOTE -> {
+                case ADD_REASONING_NOTE -> {
                     boolean hasSource = request.getSource() != null && !request.getSource().isBlank();
                     boolean hasCompiled = request.getCompiled() != null && !request.getCompiled().isBlank();
                     if (hasSource == hasCompiled) {
@@ -290,18 +461,18 @@ public class ToolExecutionRequest {
                     }
                     if (hasCompiled && !isQualifiedPath(request.getCompiled())) {
                         throw new IllegalArgumentException(
-                                "add_reasoning_note 'compiled' must be a canonical qualified path (<base>:<path>), for example: target:com/example/MyFile.java");
+                                "add_reasoning_note 'compiled' must be a canonical qualified path (<base>:<path>), for example: target:path/to/file.ext");
                     }
                     if (request.getNote() == null || request.getNote().isBlank()) {
                         throw new IllegalArgumentException("add_reasoning_note requires non-blank 'note'");
                     }
                 }
-                case CLEAR_INFERENCE_NOTES -> {
+                case CLEAR_REASONING_NOTES -> {
                     if (request.getSource() == null || request.getSource().isBlank()) {
-                        throw new IllegalArgumentException("clear_inference_notes requires 'source'");
+                        throw new IllegalArgumentException("clear_reasoning_notes requires 'source'");
                     }
                 }
-                default -> {   }
+                default -> { }
             }
             return;
         }
@@ -317,14 +488,17 @@ public class ToolExecutionRequest {
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException("Invalid tool request base/path: " + ex.getMessage(), ex);
         }
-        
-        
+
         if (request.getPath() == null) {
             throw new IllegalArgumentException("tool request path is required.");
         }
         boolean isMutationOp = request.getOperation() == Operation.WRITE_FILE
                 || request.getOperation() == Operation.PATCH_FILE
-                || request.getOperation() == Operation.DELETE_FILE;
+                || request.getOperation() == Operation.DELETE_FILE
+                || request.getOperation() == Operation.APPEND_FILE
+                || request.getOperation() == Operation.PREPEND_FILE
+                || request.getOperation() == Operation.MOVE_FILE
+                || request.getOperation() == Operation.COPY_FILE;
         if (isMutationOp && request.getPath().isBlank()) {
             throw new IllegalArgumentException("tool request path is required for mutation operations.");
         }
@@ -335,22 +509,32 @@ public class ToolExecutionRequest {
                     throw new IllegalArgumentException("write_file requires content.");
                 }
             }
-            case PATCH_FILE -> {
-                if (request.getAtLine() == null) {
-                    throw new IllegalArgumentException("patch_file requires atLine.");
-                }
-                if (request.getAtLine() < 1) {
-                    throw new IllegalArgumentException("patch_file atLine must be >= 1 (1-based).");
-                }
-                if (request.getReplacing() != null && request.getReplacing() < 0) {
-                    throw new IllegalArgumentException("patch_file replacing must be >= 0.");
-                }
+            case APPEND_FILE -> {
                 if (request.getContent() == null) {
-                    throw new IllegalArgumentException("patch_file requires content.");
+                    throw new IllegalArgumentException("append_file requires content.");
                 }
             }
-            default -> {
+            case PREPEND_FILE -> {
+                if (request.getContent() == null) {
+                    throw new IllegalArgumentException("prepend_file requires content.");
+                }
             }
+            case MOVE_FILE -> {
+                if (request.getDestination() == null || request.getDestination().isBlank()) {
+                    throw new IllegalArgumentException("move_file requires destination.");
+                }
+            }
+            case COPY_FILE -> {
+                if (request.getDestination() == null || request.getDestination().isBlank()) {
+                    throw new IllegalArgumentException("copy_file requires destination.");
+                }
+            }
+            case PATCH_FILE -> {
+                if (request.getContent() == null || request.getContent().isBlank()) {
+                    throw new IllegalArgumentException("patch_file requires content or patch (unified diff string).");
+                }
+            }
+            default -> { }
         }
     }
 
@@ -358,81 +542,23 @@ public class ToolExecutionRequest {
         if (value == null) {
             return null;
         }
-        return switch (value.trim().toLowerCase()) {
+        return switch (value.trim().toLowerCase(Locale.ROOT)) {
             case "list_files" -> Operation.LIST_FILES;
             case "read_file" -> Operation.READ_FILE;
             case "write_file" -> Operation.WRITE_FILE;
             case "patch_file" -> Operation.PATCH_FILE;
             case "delete_file" -> Operation.DELETE_FILE;
+            case "append_file" -> Operation.APPEND_FILE;
+            case "prepend_file" -> Operation.PREPEND_FILE;
+            case "move_file" -> Operation.MOVE_FILE;
+            case "copy_file" -> Operation.COPY_FILE;
             case "list_compiled_files" -> Operation.LIST_COMPILED_FILES;
             case "run_script" -> Operation.RUN_SCRIPT;
-            case "add_reasoning_note" -> Operation.ADD_INFERENCE_NOTE;
-            case "clear_inference_notes" -> Operation.CLEAR_INFERENCE_NOTES;
+            case "add_reasoning_note" -> Operation.ADD_REASONING_NOTE;
+            case "clear_reasoning_notes" -> Operation.CLEAR_REASONING_NOTES;
+            case "list_reasoning_notes" -> Operation.LIST_REASONING_NOTES;
             default -> throw new IllegalArgumentException("Unsupported tool operation: " + value);
         };
-    }
-
-    private static String stringValue(Object value) {
-        return value == null ? null : String.valueOf(value);
-    }
-
-    private static boolean booleanValue(Object value, boolean fallback) {
-        if (value == null) {
-            return fallback;
-        }
-        if (value instanceof Boolean b) {
-            return b;
-        }
-        return Boolean.parseBoolean(String.valueOf(value));
-    }
-
-    private static Integer intValue(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof Number n) {
-            return n.intValue();
-        }
-        return Integer.parseInt(String.valueOf(value));
-    }
-
-    private static List<String> stringListValue(Object value) {
-        if (value == null) {
-            return List.of();
-        }
-        if (value instanceof List<?> list) {
-            List<String> out = new ArrayList<>();
-            for (Object item : list) {
-                if (item == null) {
-                    out.add(null);
-                } else {
-                    out.add(String.valueOf(item));
-                }
-            }
-            return Collections.unmodifiableList(out);
-        }
-        return List.of(String.valueOf(value));
-    }
-
-    private static List<String> argsValue(Object value, Operation operation) {
-        if (operation != Operation.RUN_SCRIPT) {
-            return stringListValue(value);
-        }
-        if (value == null) {
-            return List.of();
-        }
-        if (!(value instanceof List<?> list)) {
-            throw new IllegalArgumentException("run_script args must be an array.");
-        }
-        List<String> out = new ArrayList<>();
-        for (Object item : list) {
-            if (item instanceof String || item instanceof Number || item instanceof Boolean) {
-                out.add(String.valueOf(item));
-            } else {
-                throw new IllegalArgumentException("run_script args entries must be string, number, or boolean.");
-            }
-        }
-        return Collections.unmodifiableList(out);
     }
 
     private static void validateRunScript(ToolExecutionRequest request) {
@@ -446,254 +572,114 @@ public class ToolExecutionRequest {
         }
     }
 
-    /**
-     * Gets the operation.
-     *
-     * @return the resolved or constructed object
-     */
     public Operation getOperation() {
         return operation;
     }
 
-    /**
-     * Sets the operation.
-     *
-     * @param operation the operation
-     */
     public void setOperation(Operation operation) {
         this.operation = operation;
     }
 
-    /**
-     * Gets the base.
-     *
-     * @return the string result
-     */
     public String getBase() {
         return base;
     }
 
-    /**
-     * Sets the base.
-     *
-     * @param base the base
-     */
     public void setBase(String base) {
         this.base = base;
     }
 
-    /**
-     * Gets the path.
-     *
-     * @return the string result
-     */
     public String getPath() {
         return path;
     }
 
-    /**
-     * Sets the path.
-     *
-     * @param path the file or directory path
-     */
     public void setPath(String path) {
         this.path = path;
     }
 
-    /**
-     * Gets the script.
-     *
-     * @return the string result
-     */
+    public String getDestination() {
+        return destination;
+    }
+
+    public void setDestination(String destination) {
+        this.destination = destination;
+    }
+
     public String getScript() {
         return script;
     }
 
-    /**
-     * Sets the script.
-     *
-     * @param script the script
-     */
     public void setScript(String script) {
         this.script = script;
     }
 
-    /**
-     * Gets the intent.
-     *
-     * @return the string result
-     */
     public String getIntent() {
         return intent;
     }
 
-    /**
-     * Sets the intent.
-     *
-     * @param intent the reasoning intent
-     */
     public void setIntent(String intent) {
         this.intent = intent;
     }
 
-    /**
-     * Checks if the component is recursive.
-     *
-     * @return true if successful or matching, false otherwise
-     */
     public boolean isRecursive() {
         return recursive;
     }
 
-    /**
-     * Sets the recursive.
-     *
-     * @param recursive the recursive
-     */
     public void setRecursive(boolean recursive) {
         this.recursive = recursive;
     }
 
-    /**
-     * Gets the content.
-     *
-     * @return the string result
-     */
     public String getContent() {
         return content;
     }
 
-    /**
-     * Sets the content.
-     *
-     * @param content the content
-     */
     public void setContent(String content) {
         this.content = content;
     }
 
-    /**
-     * Gets the at line.
-     *
-     * @return the numeric value
-     */
-    public Integer getAtLine() {
-        return atLine;
+    public boolean isBase64() {
+        return base64;
     }
 
-    /**
-     * Sets the at line.
-     *
-     * @param atLine the at line
-     */
-    public void setAtLine(Integer atLine) {
-        this.atLine = atLine;
+    public void setBase64(boolean base64) {
+        this.base64 = base64;
     }
 
-    /**
-     * Gets the replacing.
-     *
-     * @return the numeric value
-     */
-    public Integer getReplacing() {
-        return replacing;
-    }
-
-    /**
-     * Sets the replacing.
-     *
-     * @param replacing the replacing
-     */
-    public void setReplacing(Integer replacing) {
-        this.replacing = replacing;
-    }
-
-    /**
-     * Checks if the component is create parents.
-     *
-     * @return true if successful or matching, false otherwise
-     */
     public boolean isCreateParents() {
         return createParents;
     }
 
-    /**
-     * Sets the create parents.
-     *
-     * @param createParents the create parents
-     */
     public void setCreateParents(boolean createParents) {
         this.createParents = createParents;
     }
 
-    /**
-     * Gets the args.
-     *
-     * @return the string result
-     */
     public List<String> getArgs() {
         return args;
     }
 
-    /**
-     * Sets the args.
-     *
-     * @param args the args
-     */
     public void setArgs(List<String> args) {
         this.args = args == null ? List.of() : List.copyOf(args);
     }
 
-    /**
-     * Gets the source.
-     *
-     * @return the string result
-     */
     public String getSource() {
         return source;
     }
 
-    /**
-     * Sets the source.
-     *
-     * @param source the source
-     */
     public void setSource(String source) {
         this.source = source;
     }
 
-    /**
-     * Gets the compiled.
-     *
-     * @return the string result
-     */
     public String getCompiled() {
         return compiled;
     }
 
-    /**
-     * Sets the compiled.
-     *
-     * @param compiled the compiled
-     */
     public void setCompiled(String compiled) {
         this.compiled = compiled;
     }
 
-    /**
-     * Gets the note.
-     *
-     * @return the string result
-     */
     public String getNote() {
         return note;
     }
 
-    /**
-     * Sets the note.
-     *
-     * @param note the note
-     */
     public void setNote(String note) {
         this.note = note;
     }

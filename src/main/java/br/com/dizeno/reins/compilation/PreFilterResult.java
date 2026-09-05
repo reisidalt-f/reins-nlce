@@ -24,7 +24,6 @@ public final class PreFilterResult {
 
     private final List<File> sourceFiles;
     private final List<File> filesToProcess;
-    private final boolean runProjectInference;
     private final List<PreFilterSkipDecision> skipDecisions;
     private final List<CycleWorkSetEntry> workSetEntries;
     private final int validateAllPromotedCount;
@@ -33,17 +32,14 @@ public final class PreFilterResult {
      * Constructs a new instance of {@link PreFilterResult}.
      *
      * @param sourceFiles the list of source files to process
-     * @param runProjectInference the run project inference
      * @param skipDecisions the skip decisions
      */
     public PreFilterResult(List<File> sourceFiles,
-                           boolean runProjectInference,
                            List<PreFilterSkipDecision> skipDecisions) {
         this(sourceFiles,
                 sourceFiles.stream()
                         .map(file -> new CycleWorkSetEntry(file, file.getPath(), SourceProcessingStatus.COMPILE))
                         .toList(),
-                runProjectInference,
                 skipDecisions,
                 0);
     }
@@ -53,39 +49,34 @@ public final class PreFilterResult {
      *
      * @param sourceFiles the list of source files to process
      * @param workSetEntries the work set entries
-     * @param runProjectInference the run project inference
      * @param skipDecisions the skip decisions
      */
     public PreFilterResult(List<File> sourceFiles,
                            List<CycleWorkSetEntry> workSetEntries,
-                           boolean runProjectInference,
                            List<PreFilterSkipDecision> skipDecisions) {
-            this(sourceFiles, workSetEntries, runProjectInference, skipDecisions, 0);
-            }
+        this(sourceFiles, workSetEntries, skipDecisions, 0);
+    }
 
-            /**
-             * Constructs a new instance of {@link PreFilterResult}.
-             *
-             * @param sourceFiles the list of source files to process
-             * @param workSetEntries the work set entries
-             * @param runProjectInference the run project inference
-             * @param skipDecisions the skip decisions
-             * @param validateAllPromotedCount the validate all promoted count
-             */
-            public PreFilterResult(List<File> sourceFiles,
-                       List<CycleWorkSetEntry> workSetEntries,
-                       boolean runProjectInference,
-                       List<PreFilterSkipDecision> skipDecisions,
-                       int validateAllPromotedCount) {
+    /**
+     * Constructs a new instance of {@link PreFilterResult}.
+     *
+     * @param sourceFiles the list of source files to process
+     * @param workSetEntries the work set entries
+     * @param skipDecisions the skip decisions
+     * @param validateAllPromotedCount the validate all promoted count
+     */
+    public PreFilterResult(List<File> sourceFiles,
+                           List<CycleWorkSetEntry> workSetEntries,
+                           List<PreFilterSkipDecision> skipDecisions,
+                           int validateAllPromotedCount) {
         this.sourceFiles = new ArrayList<>(sourceFiles);
         this.filesToProcess = workSetEntries.stream()
                 .filter(entry -> entry.getStatus().shouldExecute())
                 .map(CycleWorkSetEntry::getSourceFile)
                 .toList();
-        this.runProjectInference = runProjectInference;
         this.skipDecisions = new ArrayList<>(skipDecisions);
         this.workSetEntries = new ArrayList<>(workSetEntries);
-            this.validateAllPromotedCount = Math.max(0, validateAllPromotedCount);
+        this.validateAllPromotedCount = Math.max(0, validateAllPromotedCount);
     }
 
     /**
@@ -104,15 +95,6 @@ public final class PreFilterResult {
      */
     public List<File> getFilesToProcess() {
         return new ArrayList<>(filesToProcess);
-    }
-
-    /**
-     * Checks if the component is run project inference.
-     *
-     * @return true if successful or matching, false otherwise
-     */
-    public boolean isRunProjectInference() {
-        return runProjectInference;
     }
 
     /**
@@ -142,7 +124,6 @@ public final class PreFilterResult {
         return validateAllPromotedCount;
     }
 
-     
     /**
      * To Processing Queue.
      *
@@ -152,7 +133,6 @@ public final class PreFilterResult {
         return new SourceProcessingQueue(new ArrayList<>(workSetEntries));
     }
 
-     
     /**
      * Fail Open.
      *
@@ -160,6 +140,6 @@ public final class PreFilterResult {
      * @return the resulting result
      */
     public static PreFilterResult failOpen(List<File> sourceFiles) {
-        return new PreFilterResult(sourceFiles, true, Collections.emptyList());
+        return new PreFilterResult(sourceFiles, Collections.emptyList());
     }
 }

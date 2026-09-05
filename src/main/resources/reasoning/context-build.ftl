@@ -9,13 +9,12 @@
        previously-compiled-files - tracking: files compiled from this source
        previously-inspected-files - tracking: files inspected during this cycle
        references-tree            - reference tree for the current source
-      background-files           - background attachments supplied to this cycle
+       background-files           - background attachments supplied to this cycle
 -->
 <#assign s = (step!"")?trim>
 
 <#if s == "list-message-type">
 system-context
-source-notes
 previously-compiled-files
 previously-inspected-files
 references-tree
@@ -27,41 +26,33 @@ SYSTEM
 <#elseif s == "source-notes">
 SYSTEM
 
-Corrective notes for this source:
-<#if project.tracking?? && project.tracking.notes?has_content>
-<#list project.tracking.notes as note>
-- ${note}
-</#list>
-<#else>
-- none
-</#if>
+Important notes for this source:
+${tracking.notesOrNone}
 <#elseif s == "previously-compiled-files">
 SYSTEM
 
-Previously compiled files for this source:
-<#if project.tracking?? && project.tracking.compiledPaths?has_content>
-<#list project.tracking.compiledPaths as p>
-- ${p}
+Previously compiled files:
+<#if (inference.compiledSourceGroups)?has_content>
+<#list inference.compiledSourceGroups as group>
+Owner: ${group.sourceCanonicalPath} (${group.sourceSimpleName})
+${group.compiledPathsOrNone}
+<#if group_has_next>
+
+</#if>
 </#list>
 <#else>
-- none
+${tracking.compiledPathsOrNone}
 </#if>
 <#elseif s == "previously-inspected-files">
 SYSTEM
 
 Previously inspected files in this cycle:
-<#if project.inference?? && project.inference.inspectedFiles?has_content>
-<#list project.inference.inspectedFiles as p>
-- ${p}
-</#list>
-<#else>
-- none
-</#if>
+${inference.inspectedFilesOrNone}
 <#elseif s == "references-tree">
 SYSTEM
 
 Reference tree:
-<#if project.referenceTree?has_content>
+<#if (project.referenceTree!"")?has_content>
 ${project.referenceTree}
 <#else>
 none
@@ -70,10 +61,9 @@ none
 SYSTEM
 
 Background attachments passed to this cycle:
-<#if project.attachments?has_content>
-<#list project.attachments as a>
+<#if attachments?has_content>
+<#list attachments as a>
 - ${a.path}
-ATTACH ${a.path}
 </#list>
 <#else>
 - none

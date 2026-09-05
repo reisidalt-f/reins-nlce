@@ -49,7 +49,7 @@ class CompilationServiceSelectionReasonLogTest {
         ReinsConfig config = baseConfig(false);
         RecordingLog log = new RecordingLog();
 
-        service.processFiles(List.of(createSourceFile("feature-no-reason.md")), false, config, projectRoot, log);
+        service.processFiles(List.of(createSourceFile("feature-no-reason.md")), config, projectRoot, log);
 
         assertFalse(log.hasInfoStartingWith("Selection reason: "),
                 "No 'Selection reason:' line must appear when the flag is false");
@@ -61,7 +61,7 @@ class CompilationServiceSelectionReasonLogTest {
         ReinsConfig config = baseConfig(true);
         RecordingLog log = new RecordingLog();
 
-        service.processFiles(List.of(createSourceFile("feature-with-reason.md")), false, config, projectRoot, log);
+        service.processFiles(List.of(createSourceFile("feature-with-reason.md")), config, projectRoot, log);
 
         assertTrue(log.hasInfoStartingWith("Selection reason: "),
                 "'Selection reason: <REASON>' must appear after the ** banner when the flag is true");
@@ -73,7 +73,7 @@ class CompilationServiceSelectionReasonLogTest {
         ReinsConfig config = baseConfig(true);
         RecordingLog log = new RecordingLog();
 
-        service.processFiles(List.of(createSourceFile("feature-unknown-reason.md")), false, config, projectRoot, log);
+        service.processFiles(List.of(createSourceFile("feature-unknown-reason.md")), config, projectRoot, log);
 
         assertTrue(log.hasInfoStartingWith("Selection reason: NO_PRIOR_RECORD"),
                 "A source with no prior record must emit a 'Selection reason: NO_PRIOR_RECORD' line when the flag is true");
@@ -96,8 +96,7 @@ class CompilationServiceSelectionReasonLogTest {
                 new MarkdownDependencyGraphBuilder(),
                 new ProcessingOrderResolver(),
                 reasoningService,
-                new ProjectContextService(),
-                null);
+                new ProjectContextService());
     }
 
     private ReasoningResult successResult() {
@@ -119,7 +118,10 @@ class CompilationServiceSelectionReasonLogTest {
 
     private ReinsConfig baseConfig(boolean selectionReason) {
         ReinsConfig config = new ReinsConfig();
-        config.setScanRoots(List.of(projectRoot.resolve("src/main/nl").toFile()));
+        config.setSourceBase("main", projectRoot.resolve("src/main/nl").toFile());
+        TargetSettings target = new TargetSettings();
+        target.setTargetBase("main", "src/main/java");
+        config.setTarget(target);
         config.setIncludePattern("**/*.md");
         config.setFailOnError(false);
 

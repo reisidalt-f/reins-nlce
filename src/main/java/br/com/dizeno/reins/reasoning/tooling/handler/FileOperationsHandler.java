@@ -22,6 +22,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -59,7 +61,11 @@ public class FileOperationsHandler implements ToolOperationHandler {
                 || operation == ToolExecutionRequest.Operation.READ_FILE
                 || operation == ToolExecutionRequest.Operation.WRITE_FILE
                 || operation == ToolExecutionRequest.Operation.PATCH_FILE
-                || operation == ToolExecutionRequest.Operation.DELETE_FILE;
+                || operation == ToolExecutionRequest.Operation.DELETE_FILE
+                || operation == ToolExecutionRequest.Operation.APPEND_FILE
+                || operation == ToolExecutionRequest.Operation.PREPEND_FILE
+                || operation == ToolExecutionRequest.Operation.MOVE_FILE
+                || operation == ToolExecutionRequest.Operation.COPY_FILE;
     }
 
     /**
@@ -82,6 +88,10 @@ public class FileOperationsHandler implements ToolOperationHandler {
                 case LIST_FILES -> listFilesWithScope(request, resolver, qualifiedPath, sourceScope);
                 case READ_FILE -> readFileWithScope(request, resolver, qualifiedPath, sourceScope);
                 case WRITE_FILE -> writeFileWithScope(request, resolver, qualifiedPath, sourceScope);
+                case APPEND_FILE -> appendFileWithScope(request, resolver, qualifiedPath, sourceScope);
+                case PREPEND_FILE -> prependFileWithScope(request, resolver, qualifiedPath, sourceScope);
+                case MOVE_FILE -> moveFileWithScope(request, resolver, qualifiedPath, sourceScope);
+                case COPY_FILE -> copyFileWithScope(request, resolver, qualifiedPath, sourceScope);
                 case PATCH_FILE -> patchFileWithScope(request, resolver, qualifiedPath, sourceScope);
                 case DELETE_FILE -> deleteFileWithScope(request, resolver, qualifiedPath, sourceScope);
                 default -> throw new IllegalArgumentException("Unsupported file operation: " + request.getOperation());
@@ -344,8 +354,105 @@ public class FileOperationsHandler implements ToolOperationHandler {
         if (request.isCreateParents()) {
             Files.createDirectories(file.getParent());
         }
-        Files.writeString(file, request.getContent(), StandardCharsets.UTF_8);
+        if (request.isBase64()) {
+            byte[] decoded = java.util.Base64.getDecoder().decode(request.getContent().trim());
+            Files.write(file, decoded);
+        } else {
+            Files.writeString(file, request.getContent(), StandardCharsets.UTF_8);
+        }
         return ToolExecutionResult.success(request.getOperation(), qualifiedPath, "written");
+    }
+
+    private ToolExecutionResult appendFileWithScope(ToolExecutionRequest request,
+                                                   BasePathResolver resolver,
+                                                   String qualifiedPath,
+                                                   String sourceScope) throws IOException {
+        Path file = securityGuard.resolveScopedTargetPath(resolver, request.getPath(), sourceScope);
+        if (request.isCreateParents() && file.getParent() != null) {
+            Files.createDirectories(file.getParent());
+        }
+        if (request.isBase64()) {
+            byte[] decoded = java.util.Base64.getDecoder().decode(request.getContent().trim());
+            Files.write(file, decoded, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } else {
+            Files.writeString(file, request.getContent(), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        }
+        return ToolExecutionResult.success(request.getOperation(), qualifiedPath, "appended");
+    }
+
+    private ToolExecutionResult prependFileWithScope(ToolExecutionRequest request,
+                                                    BasePathResolver resolver,
+                                                    String qualifiedPath,
+                                                    String sourceScope) throws IOException {
+        Path file = securityGuard.resolveScopedTargetPath(resolver, request.getPath(), sourceScope);
+        if (request.isCreateParents() && file.getParent() != null) {
+            Files.createDirectories(file.getParent());
+        }
+        if (request.isBase64()) {
+            byte[] decodedNew = java.util.Base64.getDecoder().decode(request.getContent().trim());
+            byte[] existing = Files.exists(file) ? Files.readAllBytes(file) : new byte[0];
+            byte[] combined = new byte[decodedNew.length + existing.length];
+            System.arraycopy(decodedNew, 0, combined, 0, decodedNew.length);
+            System.arraycopy(existing, 0, combined, decodedNew.length, existing.length);
+            Files.write(file, combined);
+        } else {
+            String existing = Files.exists(file) ? Files.readString(file, StandardCharsets.UTF_8) : "";
+            String combined = request.getContent() + existing;
+            Files.writeString(file, combined, StandardCharsets.UTF_8);
+        }
+        return ToolExecutionResult.success(request.getOperation(), qualifiedPath, "prepended");
+    }
+
+    private ToolExecutionResult moveFileWithScope(ToolExecutionRequest request,
+                                                 BasePathResolver resolver,
+                                                 String qualifiedPath,
+                                                 String sourceScope) throws IOException {
+        Path sourceFile = securityGuard.resolveScopedTargetPath(resolver, request.getPath(), sourceScope);
+        if (!Files.exists(sourceFile)) {
+            return ToolExecutionResult.error(request.getOperation(), qualifiedPath, "File does not exist.");
+        }
+        Path destFile = securityGuard.resolveScopedTargetPath(resolver, request.getDestination(), sourceScope);
+        if (request.isCreateParents() && destFile.getParent() != null) {
+            Files.createDirectories(destFile.getParent());
+        }
+        Files.move(sourceFile, destFile, StandardCopyOption.REPLACE_EXISTING);
+        return ToolExecutionResult.success(request.getOperation(), qualifiedPath, "moved");
+    }
+
+    private ToolExecutionResult copyFileWithScope(ToolExecutionRequest request,
+                                                 BasePathResolver resolver,
+                                                 String qualifiedPath,
+                                                 String sourceScope) throws IOException {
+        String requestedBase = resolver.normalizeBase(request.getBase());
+        Path sourceFile;
+        if ("target".equals(requestedBase)) {
+            sourceFile = securityGuard.resolveScopedTargetPath(resolver, request.getPath(), sourceScope);
+            if (!Files.exists(sourceFile)) {
+                sourceFile = resolver.resolve(requestedBase, request.getPath());
+            }
+        } else {
+            sourceFile = resolver.resolve(requestedBase, request.getPath());
+        }
+
+        if (!Files.exists(sourceFile)) {
+            if ("test".equals(requestedBase)) {
+                Path fallback = resolver.resolve("main", request.getPath());
+                if (Files.exists(fallback)) {
+                    sourceFile = fallback;
+                }
+            }
+        }
+
+        if (!Files.exists(sourceFile)) {
+            return ToolExecutionResult.error(request.getOperation(), qualifiedPath, "File does not exist.");
+        }
+
+        Path destFile = securityGuard.resolveScopedTargetPath(resolver, request.getDestination(), sourceScope);
+        if (request.isCreateParents() && destFile.getParent() != null) {
+            Files.createDirectories(destFile.getParent());
+        }
+        Files.copy(sourceFile, destFile, StandardCopyOption.REPLACE_EXISTING);
+        return ToolExecutionResult.success(request.getOperation(), qualifiedPath, "copied");
     }
 
     private ToolExecutionResult patchFileWithScope(ToolExecutionRequest request,
@@ -358,22 +465,10 @@ public class FileOperationsHandler implements ToolOperationHandler {
         }
 
         String current = Files.readString(file, StandardCharsets.UTF_8);
-        String patched;
-        if (request.getAtLine() == null) {
-            patched = request.getContent();
-        } else {
-            patched = patchApplier.apply(
-                    current,
-                    request.getAtLine(),
-                    request.getReplacing() != null ? request.getReplacing() : 0,
-                    request.getContent()
-            );
-        }
+        String patched = patchApplier.apply(current, request.getContent());
         Files.writeString(file, patched, StandardCharsets.UTF_8);
 
-        ToolExecutionResult result = ToolExecutionResult.success(request.getOperation(), qualifiedPath, "patched");
-        result.setContent(patched);
-        return result;
+        return ToolExecutionResult.success(request.getOperation(), qualifiedPath, "patched");
     }
 
     private ToolExecutionResult deleteFileWithScope(ToolExecutionRequest request,

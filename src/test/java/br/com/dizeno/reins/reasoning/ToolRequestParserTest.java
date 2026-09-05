@@ -11,124 +11,92 @@
 
 package br.com.dizeno.reins.reasoning;
 
-import br.com.dizeno.reins.reasoning.scripting.*;
-
 import br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 class ToolRequestParserTest {
 
     private final ToolRequestParser parser = new ToolRequestParser();
 
     @Test
-    void parsesFencedBlockWithNestedFences() {
-        String raw = "Here is the request:\n"
-                + "```yaml\n"
-                + "operation: write_file\n"
-                + "base: target\n"
-                + "path: src/Foo.java\n"
-                + "content: |\n"
-                + "  ```java\n"
-                + "  public class Foo {\n"
-                + "  }\n"
-                + "  ```\n"
-                + "```\n";
+    void parsesSingleReadFileRequest() {
+        String raw = "--reins-boundary\n"
+                + "READ_FILE main domain/entities.md\n"
+                + "--reins-boundary--\n";
         List<ToolExecutionRequest> requests = parser.parse(raw);
         assertEquals(1, requests.size());
-        assertEquals("src/Foo.java", requests.get(0).getPath());
-        assertEquals("```java\npublic class Foo {\n}\n```\n", requests.get(0).getContent());
+        assertEquals(ToolExecutionRequest.Operation.READ_FILE, requests.get(0).getOperation());
+        assertEquals("main", requests.get(0).getBase());
+        assertEquals("domain/entities.md", requests.get(0).getPath());
     }
 
     @Test
-    void preprocessesUnindentedLinesInBlockScalars() {
-        String raw = "operation: write_file\n"
-                + "base: target\n"
-                + "path: src/Foo.java\n"
-                + "content: |\n"
-                + "  public class Foo {\n"
-                + "  \n"
-                + "public static void main(String[] args) {\n"
-                + "    System.out.println(\"hello\");\n"
+    void parsesWriteFileWithTextPayload() {
+        String raw = "--reins-boundary\n"
+                + "WRITE_FILE target src/Foo.java\n"
+                + "\n"
+                + "public class Foo {\n"
+                + "    public static void main(String[] args) {}\n"
                 + "}\n"
-                + "  }\n";
+                + "--reins-boundary--\n";
         List<ToolExecutionRequest> requests = parser.parse(raw);
         assertEquals(1, requests.size());
-        assertEquals("public class Foo {\n\npublic static void main(String[] args) {\n    System.out.println(\"hello\");\n}\n}\n", requests.get(0).getContent());
+        assertEquals(ToolExecutionRequest.Operation.WRITE_FILE, requests.get(0).getOperation());
+        assertEquals("target", requests.get(0).getBase());
+        assertEquals("src/Foo.java", requests.get(0).getPath());
+        assertFalse(requests.get(0).isBase64());
+        assertTrue(requests.get(0).getContent().contains("public class Foo"));
     }
 
     @Test
-    void parsesMultipleDocumentsInFencedBlock() {
-        String raw = "```yaml\n"
-                + "operation: write_file\n"
-                + "base: target\n"
-                + "path: foo\n"
-                + "content: first\n"
-                + "---\n"
-                + "operation: write_file\n"
-                + "base: target\n"
-                + "path: bar\n"
-                + "content: second\n"
+    void parsesWriteFileWithBase64Payload() {
+        String raw = "--reins-boundary\n"
+                + "WRITE_FILE target assets/logo.png base64\n"
+                + "\n"
+                + "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\n"
+                + "--reins-boundary--\n";
+        List<ToolExecutionRequest> requests = parser.parse(raw);
+        assertEquals(1, requests.size());
+        assertEquals(ToolExecutionRequest.Operation.WRITE_FILE, requests.get(0).getOperation());
+        assertEquals("target", requests.get(0).getBase());
+        assertEquals("assets/logo.png", requests.get(0).getPath());
+        assertTrue(requests.get(0).isBase64());
+        assertEquals("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", requests.get(0).getContent().trim());
+    }
+
+    @Test
+    void parsesBatchToolRequests() {
+        String raw = "--reins-boundary\n"
+                + "READ_FILE main domain/entities.md\n"
+                + "--reins-boundary\n"
+                + "LIST_FILES main domain true\n"
+                + "--reins-boundary\n"
+                + "WRITE_FILE target src/Bar.java\n"
+                + "\n"
+                + "public class Bar {}\n"
+                + "--reins-boundary--\n";
+        List<ToolExecutionRequest> requests = parser.parse(raw);
+        assertEquals(3, requests.size());
+        assertEquals(ToolExecutionRequest.Operation.READ_FILE, requests.get(0).getOperation());
+        assertEquals(ToolExecutionRequest.Operation.LIST_FILES, requests.get(1).getOperation());
+        assertTrue(requests.get(1).isRecursive());
+        assertEquals(ToolExecutionRequest.Operation.WRITE_FILE, requests.get(2).getOperation());
+    }
+
+    @Test
+    void parsesFencedBlockWithBoundary() {
+        String raw = "Here is the request:\n"
+                + "```tool_request\n"
+                + "--reins-boundary\n"
+                + "READ_FILE main domain/entities.md\n"
+                + "--reins-boundary--\n"
                 + "```\n";
         List<ToolExecutionRequest> requests = parser.parse(raw);
-        assertEquals(2, requests.size());
-        assertEquals("foo", requests.get(0).getPath());
-        assertEquals("bar", requests.get(1).getPath());
-    }
-
-    @Test
-    void parsesRawYamlDocumentsWithNestedSeparators() {
-        String raw = "operation: write_file\n"
-                + "base: target\n"
-                + "path: first.yml\n"
-                + "content: |\n"
-                + "  ---\n"
-                + "  key: val\n"
-                + "---\n"
-                + "operation: write_file\n"
-                + "base: target\n"
-                + "path: second.yml\n"
-                + "content: second\n";
-        List<ToolExecutionRequest> requests = parser.parse(raw);
-        assertEquals(2, requests.size());
-        assertEquals("first.yml", requests.get(0).getPath());
-        assertEquals("---\nkey: val\n", requests.get(0).getContent());
-        assertEquals("second.yml", requests.get(1).getPath());
-    }
-
-    @Test
-    void parsesFencedBlockWithTripleQuotes() {
-        String raw = "Here is the request:\n"
-                + "\"\"\"yaml\n"
-                + "operation: write_file\n"
-                + "base: target\n"
-                + "path: src/Foo.java\n"
-                + "content: |\n"
-                + "  public class Foo {\n"
-                + "  }\n"
-                + "\"\"\"\n";
-        List<ToolExecutionRequest> requests = parser.parse(raw);
         assertEquals(1, requests.size());
-        assertEquals("src/Foo.java", requests.get(0).getPath());
-        assertEquals("public class Foo {\n}\n", requests.get(0).getContent());
-    }
-
-    @Test
-    void terminatesBlockScalarAtTripleQuotes() {
-        String raw = "operation: write_file\n"
-                + "base: target\n"
-                + "path: src/Foo.java\n"
-                + "content: |\n"
-                + "  public class Foo {\n"
-                + "  }\n"
-                + "\"\"\"\n";
-        List<ToolExecutionRequest> requests = parser.parse(raw);
-        assertEquals(1, requests.size());
-        assertEquals("src/Foo.java", requests.get(0).getPath());
-        assertEquals("public class Foo {\n}\n", requests.get(0).getContent());
+        assertEquals(ToolExecutionRequest.Operation.READ_FILE, requests.get(0).getOperation());
     }
 }

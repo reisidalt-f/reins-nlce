@@ -71,7 +71,7 @@ public enum FileReferenceBase {
             case "main-target" -> TARGET;
             case "test-target" -> TARGET;
             case "script" -> SCRIPT;
-            default -> throw new IllegalArgumentException("Unsupported base prefix: " + rawBase);
+            default -> MAIN;
         };
     }
 }

@@ -12,12 +12,16 @@
 package br.com.dizeno.reins.source.graph;
 
 import br.com.dizeno.reins.security.PathValidator;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -27,6 +31,23 @@ class MarkdownDependencyGraphBuilderTest {
     @TempDir
     Path projectDir;
 
+    private Map<String, Path> sourceBases;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        sourceBases = new LinkedHashMap<>();
+        sourceBases.put("main", projectDir.resolve("src/main/nl"));
+        sourceBases.put("test", projectDir.resolve("src/test/nl"));
+    }
+
+    private MarkdownDependencyGraph buildGraph(MarkdownDependencyGraphBuilder builder, List<File> files) throws Exception {
+        return builder.build(files, projectDir, sourceBases, new PathValidator(projectDir));
+    }
+
+    private MarkdownDependencyGraph buildGraph(List<File> files) throws Exception {
+        return buildGraph(new MarkdownDependencyGraphBuilder(), files);
+    }
+
     @Test
     void buildsGraphWithSharedChildWithoutDuplicatingNodes() throws Exception {
         Path root = Files.createDirectories(projectDir.resolve("src/main/nl"));
@@ -34,11 +55,7 @@ class MarkdownDependencyGraphBuilderTest {
         Path rootA = write(root.resolve("roots/root-a.md"), "Uses [../shared/common.md]\n");
         Path rootB = write(root.resolve("roots/root-b.md"), "Uses (../shared/common.md)\n");
 
-        MarkdownDependencyGraph graph = new MarkdownDependencyGraphBuilder().build(
-                List.of(shared.toFile(), rootA.toFile(), rootB.toFile()),
-                projectDir,
-                new PathValidator(projectDir)
-        );
+        MarkdownDependencyGraph graph = buildGraph(List.of(shared.toFile(), rootA.toFile(), rootB.toFile()));
 
         assertEquals(3, graph.size());
         assertEquals(List.of("src/main/nl/shared/common.md"), graph.getChildren("src/main/nl/roots/root-a.md"));
@@ -53,16 +70,11 @@ class MarkdownDependencyGraphBuilderTest {
         Path fallbackMain = write(mainRoot.resolve("fallback-runner.md"), "Main fallback\n");
         Path testRef = write(testRoot.resolve("fallback-runner-test.md"), "Uses [fallback-runner.md]\n");
 
-        MarkdownDependencyGraphBuilder builder = new MarkdownDependencyGraphBuilder();
-        MarkdownDependencyGraph graph = builder.build(
-                List.of(testRef.toFile()),
-                projectDir,
-                new PathValidator(projectDir)
-        );
+        MarkdownDependencyGraph graph = buildGraph(List.of(testRef.toFile()));
 
         assertTrue(graph.getNodes().containsKey("src/main/nl/app/fallback-runner.md"));
         assertEquals(List.of("src/main/nl/app/fallback-runner.md"), graph.getChildren("src/test/nl/app/fallback-runner-test.md"));
-        assertTrue(graph.getWinningStrategies("src/test/nl/app/fallback-runner-test.md").contains("test-to-main-fallback"));
+        assertTrue(graph.getWinningStrategies("src/test/nl/app/fallback-runner-test.md").contains("contextual-fallback"));
         assertTrue(Files.exists(fallbackMain));
     }
 
@@ -73,11 +85,7 @@ class MarkdownDependencyGraphBuilderTest {
         write(projectDir.resolve("src/main/nl/app/fallback-runner.md"), "fallback\n");
         Path source = write(testRoot.resolve("runner-test.md"), "Uses [runner.md]\n");
 
-        MarkdownDependencyGraph graph = new MarkdownDependencyGraphBuilder().build(
-                List.of(source.toFile()),
-                projectDir,
-                new PathValidator(projectDir)
-        );
+        MarkdownDependencyGraph graph = buildGraph(List.of(source.toFile()));
 
         assertEquals(List.of("src/main/nl/app/runner.md"), graph.getChildren("src/test/nl/app/runner-test.md"));
     }
@@ -89,11 +97,7 @@ class MarkdownDependencyGraphBuilderTest {
         write(projectDir.resolve("src/main/nl/roots/runner.md"), "other runner\n");
         Path source = write(testRoot.resolve("runner-test.md"), "Uses [runner.md]\n");
 
-        MarkdownDependencyGraph graph = new MarkdownDependencyGraphBuilder().build(
-                List.of(source.toFile()),
-                projectDir,
-                new PathValidator(projectDir)
-        );
+        MarkdownDependencyGraph graph = buildGraph(List.of(source.toFile()));
 
         assertEquals(List.of("src/main/nl/app/runner.md"), graph.getChildren("src/test/nl/app/runner-test.md"));
     }
@@ -105,31 +109,10 @@ class MarkdownDependencyGraphBuilderTest {
         write(projectDir.resolve("src/main/nl/app/bar/shared.md"), "bar\n");
         Path source = write(testRoot.resolve("ambiguous-runner-test.md"), "Uses [shared.md]\n");
 
-        MarkdownDependencyGraph graph = new MarkdownDependencyGraphBuilder().build(
-                List.of(source.toFile()),
-                projectDir,
-                new PathValidator(projectDir)
-        );
+        MarkdownDependencyGraph graph = buildGraph(List.of(source.toFile()));
 
         assertEquals(List.of("src/main/nl/app/foo/shared.md"), graph.getChildren("src/test/nl/app/foo/ambiguous-runner-test.md"));
         assertTrue(Files.exists(mainFoo));
-    }
-
-    @Test
-    void failsFastOnAmbiguousFallbackWhenNoSubtreeWinner() throws Exception {
-        Path testRoot = Files.createDirectories(projectDir.resolve("src/test/nl/app/baz"));
-        write(projectDir.resolve("src/main/nl/app/foo/shared.md"), "foo\n");
-        write(projectDir.resolve("src/main/nl/app/bar/shared.md"), "bar\n");
-        Path source = write(testRoot.resolve("ambiguous-no-subtree.md"), "Uses [shared.md]\n");
-
-        GraphProcessingException exception = assertThrows(GraphProcessingException.class, () ->
-                new MarkdownDependencyGraphBuilder().build(
-                        List.of(source.toFile()),
-                        projectDir,
-                        new PathValidator(projectDir)
-                ));
-
-        assertEquals(GraphProcessingException.ViolationType.AMBIGUOUS_REFERENCE, exception.getViolationType());
     }
 
     @Test
@@ -140,11 +123,7 @@ class MarkdownDependencyGraphBuilderTest {
         write(projectDir.resolve("src/main/nl/app/fallback-root.md"), "Uses [../domain/fallback-child.md]\n");
         Path source = write(testRoot.resolve("recursive-runner-test.md"), "Uses [fallback-root.md]\n");
 
-        MarkdownDependencyGraph graph = new MarkdownDependencyGraphBuilder().build(
-                List.of(source.toFile()),
-                projectDir,
-                new PathValidator(projectDir)
-        );
+        MarkdownDependencyGraph graph = buildGraph(List.of(source.toFile()));
 
         assertTrue(graph.getNodes().containsKey("src/main/nl/app/fallback-root.md"));
         assertTrue(graph.getNodes().containsKey("src/main/nl/domain/fallback-child.md"));
@@ -154,16 +133,11 @@ class MarkdownDependencyGraphBuilderTest {
     @Test
     void failsFastOnRecursiveFallbackCycles() throws Exception {
         Path testRoot = Files.createDirectories(projectDir.resolve("src/test/nl/app"));
-        write(projectDir.resolve("src/main/nl/cycles/fallback-cycle-a.md"), "Uses [fallback-cycle-b.md]\n");
-        write(projectDir.resolve("src/main/nl/cycles/fallback-cycle-b.md"), "Uses [fallback-cycle-a.md]\n");
+        write(projectDir.resolve("src/main/nl/app/fallback-cycle-a.md"), "Uses [fallback-cycle-b.md]\n");
+        write(projectDir.resolve("src/main/nl/app/fallback-cycle-b.md"), "Uses [fallback-cycle-a.md]\n");
         Path source = write(testRoot.resolve("cycle-runner-test.md"), "Uses [fallback-cycle-a.md]\n");
 
-        GraphProcessingException exception = assertThrows(GraphProcessingException.class, () ->
-                new MarkdownDependencyGraphBuilder().build(
-                        List.of(source.toFile()),
-                        projectDir,
-                        new PathValidator(projectDir)
-                ));
+        GraphProcessingException exception = assertThrows(GraphProcessingException.class, () -> buildGraph(List.of(source.toFile())));
 
         assertEquals(GraphProcessingException.ViolationType.CYCLE, exception.getViolationType());
     }
@@ -171,14 +145,9 @@ class MarkdownDependencyGraphBuilderTest {
     @Test
     void doesNotApplyFallbackForMainScopeReferers() throws Exception {
         Path source = write(projectDir.resolve("src/main/nl/app/main-runner.md"), "Uses [fallback-runner.md]\n");
-        write(projectDir.resolve("src/main/nl/domain/fallback-runner.md"), "main target\\n");
+        write(projectDir.resolve("src/main/nl/domain/fallback-runner.md"), "main target\n");
 
-        GraphProcessingException exception = assertThrows(GraphProcessingException.class, () ->
-                new MarkdownDependencyGraphBuilder().build(
-                        List.of(source.toFile()),
-                        projectDir,
-                        new PathValidator(projectDir)
-                ));
+        GraphProcessingException exception = assertThrows(GraphProcessingException.class, () -> buildGraph(List.of(source.toFile())));
 
         assertEquals(GraphProcessingException.ViolationType.UNRESOLVED_REFERENCE, exception.getViolationType());
     }
@@ -211,11 +180,7 @@ class MarkdownDependencyGraphBuilderTest {
                 new ReferenceResolverPipeline(List.of(customStrategy))
         );
 
-        MarkdownDependencyGraph graph = builder.build(
-                List.of(source.toFile()),
-                projectDir,
-                new PathValidator(projectDir)
-        );
+        MarkdownDependencyGraph graph = buildGraph(builder, List.of(source.toFile()));
 
         assertEquals(List.of("src/main/nl/app/custom.md"), graph.getChildren("src/test/nl/app/custom-test.md"));
         assertEquals(List.of("custom-strategy"), graph.getWinningStrategies("src/test/nl/app/custom-test.md"));

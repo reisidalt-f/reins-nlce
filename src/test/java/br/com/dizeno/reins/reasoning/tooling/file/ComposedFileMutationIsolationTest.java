@@ -31,7 +31,7 @@ class ComposedFileMutationIsolationTest {
     private FileComposedViewFixture fixture;
     private br.com.dizeno.reins.reasoning.tooling.file.BasePathMappingSet mappings;
     private br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver;
-    private br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService;
+    private br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService;
 
     @BeforeEach
     void setUp() {
@@ -44,7 +44,7 @@ class ComposedFileMutationIsolationTest {
         mappings.setTargetRoot(fixture.getBasePath("main-target"));
 
         resolver = new br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver(mappings, new br.com.dizeno.reins.security.PathValidator(tempDir));
-        mcpService = new br.com.dizeno.reins.reasoning.tooling.ToolingService();
+        toolingService = new br.com.dizeno.reins.reasoning.tooling.ToolingService();
     }
 
     
@@ -65,7 +65,7 @@ class ComposedFileMutationIsolationTest {
             request.setPath("NewClass.java");
             request.setContent("public class NewClass {}");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "test");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "test");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -87,7 +87,7 @@ class ComposedFileMutationIsolationTest {
             request.setPath("MainClass.java");
             request.setContent("public class MainClass {}");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "main");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "main");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -108,7 +108,7 @@ class ComposedFileMutationIsolationTest {
             request.setPath("Violation.java");
             request.setContent("public class Violation {}");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "test");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "test");
 
             
             
@@ -142,9 +142,9 @@ class ComposedFileMutationIsolationTest {
             request.setBase("target");
             request.setPath("Config.java");
             
-            request.setContent("public class Config { int val = 2; }");
+            request.setContent("@@ -1 +1 @@\n-public class Config { int val = 1; }\n+public class Config { int val = 2; }");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "test");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "test");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -166,9 +166,9 @@ class ComposedFileMutationIsolationTest {
             request.setOperation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.PATCH_FILE);
             request.setBase("target");
             request.setPath("Helper.java");
-            request.setContent("public class Helper { String updated = true; }");
+            request.setContent("@@ -1 +1 @@\n-public class Helper {}\n+public class Helper { String updated = true; }");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "main");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "main");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -196,7 +196,7 @@ class ComposedFileMutationIsolationTest {
             request.setBase("target");
             request.setPath("Temporary.java");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "test");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "test");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -219,7 +219,7 @@ class ComposedFileMutationIsolationTest {
             request.setBase("target");
             request.setPath("ToDelete.java");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "main");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "main");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -241,7 +241,7 @@ class ComposedFileMutationIsolationTest {
             request.setBase("target");
             request.setPath("OnlyInMain.java");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "test");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "test");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.ERROR, result.getStatus());
@@ -268,9 +268,9 @@ class ComposedFileMutationIsolationTest {
             request.setOperation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.PATCH_FILE);
             request.setBase("target");
             request.setPath("MainOnly.java");  
-            request.setContent("public class MainOnly { /* patched */ }");
+            request.setContent("@@ -1 +1 @@\n-public class MainOnly {}\n+public class MainOnly { /* patched */ }");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "test");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "test");
 
             
             
@@ -298,7 +298,7 @@ class ComposedFileMutationIsolationTest {
             readRequest.setOperation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.READ_FILE);
             readRequest.setBase("target");
             readRequest.setPath("ExistingFile.java");
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult readResult = mcpService.executeWithScope(readRequest, resolver, "test");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult readResult = toolingService.executeWithScope(readRequest, resolver, "test");
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, readResult.getStatus(),
                     "Composition should allow reading main-target file");
 
@@ -308,7 +308,7 @@ class ComposedFileMutationIsolationTest {
             writeRequest.setBase("target");
             writeRequest.setPath("NewFileInTest.java");
             writeRequest.setContent("public class NewFileInTest {}");
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult writeResult = mcpService.executeWithScope(writeRequest, resolver, "test");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult writeResult = toolingService.executeWithScope(writeRequest, resolver, "test");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, writeResult.getStatus());

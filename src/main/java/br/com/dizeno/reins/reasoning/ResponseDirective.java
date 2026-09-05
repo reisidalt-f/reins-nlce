@@ -28,7 +28,8 @@ public class ResponseDirective {
     public enum Intent {
         FINISH_SUCCESS,
         FINISH_ERROR,
-        WAITING_FOR_NEXT_MESSAGE
+        WAITING_FOR_NEXT_MESSAGE,
+        GOTO_PHASE
     }
 
     /**
@@ -37,7 +38,8 @@ public class ResponseDirective {
      */
     public enum ContentType {
         MESSAGE_TO_USER,
-        TOOL_REQUEST
+        TOOL_REQUEST,
+        CONVERSATION_SUMMARY
     }
 
     /**
@@ -345,7 +347,26 @@ public class ResponseDirective {
     private String failureReason;
     private PlanningContent planningContent;
     private DecisionState decisionState;
+    private String targetPhase;
     private List<IntermediateGoal> intermediateGoals = new ArrayList<>();
+
+    /**
+     * Gets the target phase.
+     *
+     * @return the target phase name
+     */
+    public String getTargetPhase() {
+        return targetPhase;
+    }
+
+    /**
+     * Sets the target phase.
+     *
+     * @param targetPhase the target phase name
+     */
+    public void setTargetPhase(String targetPhase) {
+        this.targetPhase = targetPhase;
+    }
 
     /**
      * Gets the intent.

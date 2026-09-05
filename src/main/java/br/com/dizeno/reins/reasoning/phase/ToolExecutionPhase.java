@@ -68,7 +68,7 @@ public class ToolExecutionPhase implements ReasoningPhase {
             inbound.setFailureClass("parse-error");
             context.setPromptAttachments(new ArrayList<>());
 
-            String nextMessage = coordinator.renderPipelineGeminiMessageWithFailureLogging(
+            String nextMessage = coordinator.renderPipelineMessageToModelWithFailureLogging(
                     context.getCycleLog(),
                     inbound.getSequence(),
                     context.getCurrentPipelinePhase(),
@@ -150,7 +150,7 @@ public class ToolExecutionPhase implements ReasoningPhase {
             context.setPromptAttachments(aggregatedAttachments);
 
             String nextMessage = operationResults.size() == 1
-                    ? coordinator.renderPipelineGeminiMessageWithFailureLogging(
+                    ? coordinator.renderPipelineMessageToModelWithFailureLogging(
                         context.getCycleLog(),
                         inbound.getSequence(),
                         context.getCurrentPipelinePhase(),
@@ -228,16 +228,19 @@ public class ToolExecutionPhase implements ReasoningPhase {
 
             if (operationResult == null) {
                 ReferenceMutationDecision mutationDecision =
-                        coordinator.toolOperationHandler.evaluateReferenceMutationDecision(context.getRequest(), operationRequest, context.getResolver());
+                        coordinator.toolOperationHandler.evaluateReferenceMutationDecision(context.getRequest(), operationRequest, context.getResolver(), context.getConfig());
                 if (mutationDecision.isBlocked()) {
                     String reasonText = coordinator.toolOperationHandler.formatDecisionReason(mutationDecision);
                     if (context.getRequest().getOperationLogger() != null) {
                         context.getRequest().getOperationLogger().accept(DefaultReasoningExecutionCoordinator.formatReferenceMutationLogFields(mutationDecision));
                     }
+                    boolean addReasoningNotesEnabled = context.getConfig() != null
+                            && context.getConfig().getTooling() != null
+                            && context.getConfig().getTooling().isAddReasoningNotes();
                     operationResult = ToolExecutionResult.error(
                             operationRequest.getOperation(),
                             context.getResolver().qualify(operationRequest.getBase(), operationRequest.getPath()),
-                            DefaultReasoningExecutionCoordinator.formatReferenceMutationBlockedMessage(reasonText)
+                            DefaultReasoningExecutionCoordinator.formatReferenceMutationBlockedMessage(reasonText, addReasoningNotesEnabled)
                     );
                 } else {
                     operationResult = coordinator.toolOperationHandler.executeWithSerialization(
@@ -338,7 +341,7 @@ public class ToolExecutionPhase implements ReasoningPhase {
         context.setPromptAttachments(promptAttachments);
 
         String nextMessage = operationResults.size() == 1
-                ? coordinator.renderPipelineGeminiMessageWithFailureLogging(
+                ? coordinator.renderPipelineMessageToModelWithFailureLogging(
                     context.getCycleLog(),
                     inbound.getSequence(),
                     context.getCurrentPipelinePhase(),

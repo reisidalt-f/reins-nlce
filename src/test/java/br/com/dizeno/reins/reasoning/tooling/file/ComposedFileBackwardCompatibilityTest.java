@@ -32,7 +32,7 @@ class ComposedFileBackwardCompatibilityTest {
     private FileComposedViewFixture fixture;
     private br.com.dizeno.reins.reasoning.tooling.file.BasePathMappingSet mappings;
     private br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver;
-    private br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService;
+    private br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService;
 
     @BeforeEach
     void setUp() {
@@ -44,7 +44,7 @@ class ComposedFileBackwardCompatibilityTest {
         mappings.setTargetRoot(fixture.getBasePath("main-target"));
 
         resolver = new br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver(mappings, new br.com.dizeno.reins.security.PathValidator(tempDir));
-        mcpService = new br.com.dizeno.reins.reasoning.tooling.ToolingService();
+        toolingService = new br.com.dizeno.reins.reasoning.tooling.ToolingService();
     }
 
     @Nested
@@ -66,7 +66,7 @@ class ComposedFileBackwardCompatibilityTest {
             
             
             
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, null);
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, null);
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -87,7 +87,7 @@ class ComposedFileBackwardCompatibilityTest {
             request.setBase("main");
             request.setPath(".");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "main");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "main");
 
             
             List<String> listed = result.getListedPaths();
@@ -117,7 +117,7 @@ class ComposedFileBackwardCompatibilityTest {
             request.setPath("NewOutput.java");
             request.setContent("public class NewOutput {}");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "main");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "main");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -137,7 +137,7 @@ class ComposedFileBackwardCompatibilityTest {
             request.setPath("Output.java");
             request.setContent("public class Output {}");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, null);
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, null);
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -162,7 +162,7 @@ class ComposedFileBackwardCompatibilityTest {
             request.setBase("target");
             request.setPath("TestOnly.java");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "main");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "main");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.ERROR, result.getStatus(),
@@ -181,7 +181,7 @@ class ComposedFileBackwardCompatibilityTest {
             request.setBase("target");
             request.setPath("MainOutput.java");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "main");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "main");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -204,11 +204,9 @@ class ComposedFileBackwardCompatibilityTest {
             request.setOperation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.Operation.PATCH_FILE);
             request.setBase("target");
             request.setPath("Config.java");
-            request.setAtLine(1);
-            request.setReplacing(1);
-            request.setContent("public class Config { int x = 2; }");
+            request.setContent("@@ -1 +1 @@\n-public class Config { int x = 1; }\n+public class Config { int x = 2; }");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "main");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "main");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus(),
@@ -229,7 +227,7 @@ class ComposedFileBackwardCompatibilityTest {
             request.setBase("target");
             request.setPath("Temp.java");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "main");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "main");
 
             
             if (result.getStatus() == br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS) {
@@ -255,7 +253,7 @@ class ComposedFileBackwardCompatibilityTest {
             request.setBase("target");
             request.setPath("NonExistent.java");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "main");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "main");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.ERROR, result.getStatus());
@@ -273,7 +271,7 @@ class ComposedFileBackwardCompatibilityTest {
             request.setBase("target");
             request.setPath("../../../etc/passwd");  
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "main");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "main");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.ERROR, result.getStatus());

@@ -26,6 +26,7 @@ import br.com.dizeno.reins.compilation.tracking.CleanupService;
 import br.com.dizeno.reins.compilation.tracking.CompilationTrackingStore;
 import br.com.dizeno.reins.compilation.tracking.ReasoningNote;
 import br.com.dizeno.reins.compilation.tracking.SourceTrackingManager;
+import br.com.dizeno.reins.compilation.tracking.SourceTrackingRecord;
 import br.com.dizeno.reins.reasoning.scripting.ScriptRegistry;
 import br.com.dizeno.reins.reasoning.scripting.ScriptResolver;
 import br.com.dizeno.reins.run.config.*;
@@ -113,18 +114,20 @@ public class ReinsRunner {
             ExplicitSourceResolver.ResolutionResult resolution = new ExplicitSourceResolver().resolve(
                     config.getSource(),
                     projectRoot,
-                    config.getMainNlRoot(),
-                    config.getTestNlRoot(),
+                    config.getSourceBases(),
                     config.getIncludePattern(),
                     pathValidator);
 
-            log.info("Explicit source mode active: " + PathLogFormatter.formatPath(resolution.resolvedPath(), projectRoot));
+            String displayPaths = resolution.resolvedPaths().stream()
+                    .map(p -> PathLogFormatter.formatPath(p, projectRoot))
+                    .collect(java.util.stream.Collectors.joining(", "));
+            log.info("Explicit source mode active: " + displayPaths);
 
             files = resolution.files();
             if (resolution.directory() && files.isEmpty()) {
-                log.warn("Explicit source directory contains zero eligible files: " + PathLogFormatter.formatPath(resolution.resolvedPath(), projectRoot));
+                log.warn("Explicit source directory contains zero eligible files: " + displayPaths);
                 log.info(
-                        "Summary: discovered=0, dependencyLinks=0, processed=0, compiled=0, skipped=0, failed=0, reprocessedDueToStaleness=0, reprocessedDueToChildChange=0");
+                        "Summary: discovered=0, dependencyLinks=0, processed=0, compiled=0, noChange=0, skipped=0, failed=0, reprocessedDueToStaleness=0, reprocessedDueToChildChange=0");
                 return new CompilationSummary();
             }
         } else {
@@ -136,17 +139,14 @@ public class ReinsRunner {
         }
 
         if (files.isEmpty()) {
-            if (config.isEnableProjectInference() && config.getProjectContextFile() != null) {
-                log.info("No source instruction files found in scan roots. Project inference cycle will proceed.");
-            } else {
-                log.info("No source instruction files found in scan roots. No inference will be performed.");
-                return new CompilationSummary();
-            }
+            log.info("No source instruction files found in scan roots. No inference will be performed.");
+            return new CompilationSummary();
         }
 
         PreFilterResult preFilterResult;
         if (discoveryMode == SourceDiscoveryMode.EXPLICIT_SOURCE) {
-            preFilterResult = new PreFilterResult(files, buildExplicitWorkSet(files, projectRoot), false, List.of());
+            preFilterResult = new PreFilterResult(files, buildExplicitWorkSet(files, projectRoot), List.of());
+            log.info("Explicit source mode processed files: " + preFilterResult.getFilesToProcess().size());
         } else {
             preFilterResult = preFilterService.filter(files, config, projectRoot, log);
             if (config.getLog() != null && config.getLog().isSkipped()) {
@@ -155,44 +155,7 @@ public class ReinsRunner {
             }
         }
 
-        if (discoveryMode == SourceDiscoveryMode.EXPLICIT_SOURCE) {
-            log.info("Explicit source mode processed files: " + preFilterResult.getFilesToProcess().size());
-        }
-
-        CompilationSummary summary;
-        if (discoveryMode == SourceDiscoveryMode.EXPLICIT_SOURCE) {
-            summary = new CompilationSummary();
-            SourceFileProcessor sourceFileProcessor = new SourceFileProcessor(compilationService);
-            List<ProcessingResult> processingResults = new ArrayList<>();
-            for (int i = 0; i < preFilterResult.getFilesToProcess().size(); i++) {
-                File sourceFile = preFilterResult.getFilesToProcess().get(i);
-                boolean runProjectInferenceForFile = i == 0 && preFilterResult.isRunProjectInference();
-                ProcessingResult processingResult = sourceFileProcessor.process(
-                        sourceFile,
-                        runProjectInferenceForFile,
-                        config,
-                        projectRoot,
-                        log);
-                processingResults.add(processingResult);
-                if (processingResult.success()) {
-                    summary.incrementProcessed();
-                } else {
-                    summary.incrementFailed();
-                }
-            }
-            log.info("Explicit source per-file results: " + processingResults.size());
-        } else {
-            boolean usesStatusDrivenWorkset = preFilterResult.getWorkSetEntries().stream()
-                    .anyMatch(entry -> entry.getStatus() != SourceProcessingStatus.COMPILE);
-            summary = usesStatusDrivenWorkset
-                    ? compilationService.processFiles(preFilterResult, config, projectRoot, log)
-                    : compilationService.processFiles(
-                            preFilterResult.getFilesToProcess(),
-                            preFilterResult.isRunProjectInference(),
-                            config,
-                            projectRoot,
-                            log);
-        }
+        CompilationSummary summary = compilationService.processFiles(preFilterResult, config, projectRoot, log);
 
         if (summary == null) {
             summary = new CompilationSummary();
@@ -202,6 +165,7 @@ public class ReinsRunner {
                 + ", dependencyLinks=" + summary.getDependencyLinks()
                 + ", processed=" + summary.getProcessed()
                 + ", compiled=" + summary.getCompiled()
+                + ", noChange=" + summary.getNoChange()
                 + ", skipped=" + summary.getSkipped()
                 + ", failed=" + summary.getFailed()
                 + ", reprocessedDueToStaleness=" + summary.getReprocessedDueToStaleness()
@@ -230,7 +194,22 @@ public class ReinsRunner {
         CleanupService cleanupService = new CleanupService();
         PathValidator validator = new PathValidator(projectRoot);
 
-        CleanupOutcomeSummary summary = cleanupService.executeCleanup(projectRoot, validator);
+        List<File> targetSourceFiles = null;
+        if (config.isExplicitSourceMode() || (config.getSource() != null && !config.getSource().isBlank())) {
+            ExplicitSourceResolver.ResolutionResult resolution = new ExplicitSourceResolver().resolve(
+                    config.getSource(),
+                    projectRoot,
+                    config.getSourceBases(),
+                    config.getIncludePattern(),
+                    validator);
+            targetSourceFiles = resolution.files();
+            String displayPaths = resolution.resolvedPaths().stream()
+                    .map(p -> PathLogFormatter.formatPath(p, projectRoot))
+                    .collect(java.util.stream.Collectors.joining(", "));
+            log.info("Explicit source mode active for cleanup: " + displayPaths);
+        }
+
+        CleanupOutcomeSummary summary = cleanupService.executeCleanup(projectRoot, validator, targetSourceFiles);
         CleanupReporter reporter = new CleanupReporter(log);
         reporter.reportOutcome(summary, config.isVerbose());
 
@@ -253,7 +232,7 @@ public class ReinsRunner {
      *
      * @param config  the Reins configuration settings
      * @param baseDir the base dir
-     * @param source  the source
+     * @param source  the source or comma-separated list of sources
      * @param note    the note
      * @param origin  the origin
      * @param log     the logger instance
@@ -270,18 +249,190 @@ public class ReinsRunner {
 
         Path projectRoot = baseDir.toPath().toAbsolutePath().normalize();
         CompilationTrackingStore trackingStore = new CompilationTrackingStore();
-        String canonicalSourcePath = trackingStore.canonicalizePath(source);
-
         SourceTrackingManager manager = new SourceTrackingManager();
-        int noteCount = manager.appendNote(
-                projectRoot,
-                canonicalSourcePath,
-                note,
-                origin,
-                trackingStore);
-        log.info("[ReinsRunner] Note appended to: " + PathLogFormatter.formatPath(canonicalSourcePath, projectRoot)
-                + " (total notes: " + noteCount + ")");
-        return noteCount;
+        PathValidator validator = new PathValidator(projectRoot);
+
+        List<File> targetFiles = null;
+        try {
+            ExplicitSourceResolver.ResolutionResult resolution = new ExplicitSourceResolver().resolve(
+                    source,
+                    projectRoot,
+                    config != null ? config.getSourceBases() : null,
+                    config != null ? config.getIncludePattern() : null,
+                    validator);
+            targetFiles = resolution.files();
+        } catch (Exception ignored) {
+        }
+
+        int lastNoteCount = 0;
+        if (targetFiles != null && !targetFiles.isEmpty()) {
+            for (File file : targetFiles) {
+                String sourcePath = PathNormalizer.toForwardSlashes(
+                        projectRoot.toAbsolutePath().normalize()
+                                .relativize(file.toPath().toAbsolutePath().normalize()).toString());
+                String canonicalSourcePath = trackingStore.canonicalizePath(sourcePath);
+                lastNoteCount = manager.appendNote(
+                        projectRoot,
+                        canonicalSourcePath,
+                        note,
+                        origin,
+                        trackingStore);
+                log.info("[ReinsRunner] Note appended to: " + PathLogFormatter.formatPath(canonicalSourcePath, projectRoot)
+                        + " (total notes: " + lastNoteCount + ")");
+            }
+        } else {
+            List<String> sourceList = new br.com.dizeno.reins.source.validation.ExplicitSourceValidator().validateSourceInputs(source);
+            for (String singleSource : sourceList) {
+                String canonicalSourcePath = trackingStore.canonicalizePath(singleSource);
+                lastNoteCount = manager.appendNote(
+                        projectRoot,
+                        canonicalSourcePath,
+                        note,
+                        origin,
+                        trackingStore);
+                log.info("[ReinsRunner] Note appended to: " + PathLogFormatter.formatPath(canonicalSourcePath, projectRoot)
+                        + " (total notes: " + lastNoteCount + ")");
+            }
+        }
+        return lastNoteCount;
+    }
+
+    /**
+     * List Notes.
+     *
+     * @param config  the Reins configuration settings
+     * @param baseDir the base dir
+     * @param source  the source or comma-separated list of sources (optional, null or blank lists all scanned sources)
+     * @param log     the logger instance
+     * @return map of source path to list of reasoning notes
+     */
+    public java.util.Map<String, List<ReasoningNote>> listNotes(ReinsConfig config, File baseDir, String source, Log log) throws Exception {
+        Path projectRoot = baseDir.toPath().toAbsolutePath().normalize();
+        CompilationTrackingStore trackingStore = new CompilationTrackingStore();
+        PathValidator validator = new PathValidator(projectRoot);
+
+        List<String> targetSourcePaths = collectTargetSourcePaths(config, baseDir, source, projectRoot, trackingStore, validator);
+
+        java.util.Map<String, List<ReasoningNote>> result = new java.util.LinkedHashMap<>();
+        for (String sourcePath : targetSourcePaths) {
+            String canonicalSourcePath = trackingStore.canonicalizePath(sourcePath);
+            java.util.Optional<SourceTrackingRecord> recordOpt = trackingStore.load(projectRoot, canonicalSourcePath);
+            if (recordOpt.isPresent()) {
+                List<ReasoningNote> notes = recordOpt.get().getNotes();
+                if (notes != null && !notes.isEmpty()) {
+                    result.put(canonicalSourcePath, new ArrayList<>(notes));
+                }
+            }
+        }
+
+        if (result.isEmpty()) {
+            log.info("[ReinsRunner] No notes found.");
+        } else {
+            log.info("[ReinsRunner] Found notes for " + result.size() + " source(s):");
+            for (java.util.Map.Entry<String, List<ReasoningNote>> entry : result.entrySet()) {
+                String src = entry.getKey();
+                List<ReasoningNote> notes = entry.getValue();
+                log.info("  Source: " + PathLogFormatter.formatPath(src, projectRoot) + " (" + notes.size() + " note(s)):");
+                for (ReasoningNote note : notes) {
+                    log.info("    - [" + note.getOrigin() + " | " + note.getCreatedAt() + "] " + note.getText());
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Clear Notes.
+     *
+     * @param config  the Reins configuration settings
+     * @param baseDir the base dir
+     * @param source  the source or comma-separated list of sources (optional, null or blank clears all scanned sources)
+     * @param log     the logger instance
+     * @return the total number of notes cleared
+     */
+    public int clearNotes(ReinsConfig config, File baseDir, String source, Log log) throws Exception {
+        Path projectRoot = baseDir.toPath().toAbsolutePath().normalize();
+        CompilationTrackingStore trackingStore = new CompilationTrackingStore();
+        SourceTrackingManager manager = new SourceTrackingManager();
+        PathValidator validator = new PathValidator(projectRoot);
+
+        List<String> targetSourcePaths = collectTargetSourcePaths(config, baseDir, source, projectRoot, trackingStore, validator);
+
+        int totalCleared = 0;
+        int clearedFilesCount = 0;
+        for (String sourcePath : targetSourcePaths) {
+            String canonicalSourcePath = trackingStore.canonicalizePath(sourcePath);
+            int cleared = manager.clearNotes(projectRoot, canonicalSourcePath, trackingStore);
+            if (cleared > 0) {
+                totalCleared += cleared;
+                clearedFilesCount++;
+                log.info("[ReinsRunner] Cleared " + cleared + " note(s) from: " + PathLogFormatter.formatPath(canonicalSourcePath, projectRoot));
+            }
+        }
+
+        if (totalCleared == 0) {
+            log.info("[ReinsRunner] No notes to clear.");
+        } else {
+            log.info("[ReinsRunner] Cleared a total of " + totalCleared + " note(s) across " + clearedFilesCount + " source file(s).");
+        }
+
+        return totalCleared;
+    }
+
+    private List<String> collectTargetSourcePaths(ReinsConfig config, File baseDir, String source, Path projectRoot, CompilationTrackingStore trackingStore, PathValidator validator) {
+        java.util.Set<String> candidatePaths = new java.util.LinkedHashSet<>();
+        if (source != null && !source.isBlank()) {
+            List<File> targetFiles = null;
+            try {
+                ExplicitSourceResolver.ResolutionResult resolution = new ExplicitSourceResolver().resolve(
+                        source,
+                        projectRoot,
+                        config != null ? config.getSourceBases() : null,
+                        config != null ? config.getIncludePattern() : null,
+                        validator);
+                targetFiles = resolution.files();
+            } catch (Exception ignored) {
+            }
+
+            if (targetFiles != null && !targetFiles.isEmpty()) {
+                for (File file : targetFiles) {
+                    String sourcePath = PathNormalizer.toForwardSlashes(
+                            projectRoot.toAbsolutePath().normalize()
+                                    .relativize(file.toPath().toAbsolutePath().normalize()).toString());
+                    candidatePaths.add(trackingStore.canonicalizePath(sourcePath));
+                }
+            } else {
+                List<String> sourceList = new br.com.dizeno.reins.source.validation.ExplicitSourceValidator().validateSourceInputs(source);
+                for (String singleSource : sourceList) {
+                    candidatePaths.add(trackingStore.canonicalizePath(singleSource));
+                }
+            }
+        } else {
+            try {
+                List<String> tracked = trackingStore.listAllTrackedSourcePaths(projectRoot);
+                for (String t : tracked) {
+                    candidatePaths.add(trackingStore.canonicalizePath(t));
+                }
+            } catch (Exception ignored) {
+            }
+            try {
+                List<File> scanRoots = config != null ? config.getScanRoots() : null;
+                String includePattern = config != null ? config.getIncludePattern() : null;
+                List<File> scannedFiles = new CoderMdScanner().scan(
+                        scanRoots,
+                        includePattern,
+                        validator,
+                        SourceDiscoveryMode.FULL_SCAN);
+                for (File file : scannedFiles) {
+                    String sourcePath = PathNormalizer.toForwardSlashes(
+                            projectRoot.toAbsolutePath().normalize()
+                                    .relativize(file.toPath().toAbsolutePath().normalize()).toString());
+                    candidatePaths.add(trackingStore.canonicalizePath(sourcePath));
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return new ArrayList<>(candidatePaths);
     }
 
     private List<CycleWorkSetEntry> buildExplicitWorkSet(List<File> files, Path projectRoot) {
@@ -290,7 +441,9 @@ public class ReinsRunner {
             String sourcePath = PathNormalizer.toForwardSlashes(
                     projectRoot.toAbsolutePath().normalize()
                             .relativize(file.toPath().toAbsolutePath().normalize()).toString());
-            entries.add(new CycleWorkSetEntry(file, sourcePath, SourceProcessingStatus.COMPILE));
+            CycleWorkSetEntry entry = new CycleWorkSetEntry(file, sourcePath, SourceProcessingStatus.COMPILE);
+            entry.setSelectionReason(br.com.dizeno.reins.compilation.tracking.ReprocessingDecision.ReprocessingReason.NO_PRIOR_RECORD);
+            entries.add(entry);
         }
         return entries;
     }

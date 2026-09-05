@@ -23,6 +23,7 @@ import java.util.function.Function;
  */
 public final class FileReference {
     private final FileReferenceBase base;
+    private final String customBaseName;
     private final String path;
 
     /**
@@ -32,7 +33,21 @@ public final class FileReference {
      * @param path the file or directory path
      */
     public FileReference(FileReferenceBase base, String path) {
-        this.base = Objects.requireNonNull(base, "base must not be null");
+        this(base, base != null ? base.value() : "main", path);
+    }
+
+    /**
+     * Constructs a new instance of {@link FileReference} with a custom base name.
+     *
+     * @param base the base enum fallback
+     * @param customBaseName the explicit base name
+     * @param path the file or directory path
+     */
+    public FileReference(FileReferenceBase base, String customBaseName, String path) {
+        this.base = base != null ? base : FileReferenceBase.MAIN;
+        this.customBaseName = customBaseName != null && !customBaseName.isBlank()
+                ? customBaseName.trim().toLowerCase(java.util.Locale.ROOT)
+                : this.base.value();
         this.path = normalizePath(path);
     }
 
@@ -44,7 +59,17 @@ public final class FileReference {
      * @return the resolved or constructed object
      */
     public static FileReference of(String base, String path) {
-        return new FileReference(FileReferenceBase.from(base), path);
+        if (base == null || base.isBlank()) {
+            throw new IllegalArgumentException("Base is required.");
+        }
+        String normalized = base.trim().toLowerCase(java.util.Locale.ROOT);
+        FileReferenceBase fileBase;
+        try {
+            fileBase = FileReferenceBase.from(normalized);
+        } catch (Exception ex) {
+            fileBase = FileReferenceBase.MAIN;
+        }
+        return new FileReference(fileBase, normalized, path);
     }
 
     /**
@@ -79,6 +104,15 @@ public final class FileReference {
     }
 
     /**
+     * Gets the custom or explicit base name.
+     *
+     * @return base name string
+     */
+    public String getBaseName() {
+        return customBaseName;
+    }
+
+    /**
      * Gets the path.
      *
      * @return the string result
@@ -93,7 +127,7 @@ public final class FileReference {
      * @return the string result
      */
     public String toCanonicalString() {
-        return base.value() + ":" + path;
+        return customBaseName + ":" + path;
     }
 
     /**
@@ -114,6 +148,23 @@ public final class FileReference {
     }
 
     /**
+     * To Absolute Path using String base resolver.
+     *
+     * @param baseRootResolver the base root resolver by string base name
+     * @return the resolved or constructed object
+     */
+    public Path toAbsolutePathByBaseName(Function<String, Path> baseRootResolver) {
+        Objects.requireNonNull(baseRootResolver, "baseRootResolver must not be null");
+        Path baseRoot = Objects.requireNonNull(baseRootResolver.apply(customBaseName), "base root must not be null for base " + customBaseName)
+                .toAbsolutePath().normalize();
+        Path candidate = path.isBlank() ? baseRoot : baseRoot.resolve(path).normalize();
+        if (!candidate.startsWith(baseRoot)) {
+            throw new SecurityException("Path is outside base root: " + toCanonicalString());
+        }
+        return candidate;
+    }
+
+    /**
      * To Project Relative Path.
      *
      * @param baseRootResolver the base root resolver
@@ -122,6 +173,23 @@ public final class FileReference {
      */
     public String toProjectRelativePath(Function<FileReferenceBase, Path> baseRootResolver, Path projectRoot) {
         Path absolutePath = toAbsolutePath(baseRootResolver);
+        Path normalizedProjectRoot = Objects.requireNonNull(projectRoot, "projectRoot must not be null")
+                .toAbsolutePath().normalize();
+        if (!absolutePath.startsWith(normalizedProjectRoot)) {
+            throw new SecurityException("Path is outside project root: " + toCanonicalString());
+        }
+        return PathNormalizer.toForwardSlashes(normalizedProjectRoot.relativize(absolutePath));
+    }
+
+    /**
+     * To Project Relative Path using String base resolver.
+     *
+     * @param baseRootResolver the base root resolver by string base name
+     * @param projectRoot the root path of the project
+     * @return the string result
+     */
+    public String toProjectRelativePathByBaseName(Function<String, Path> baseRootResolver, Path projectRoot) {
+        Path absolutePath = toAbsolutePathByBaseName(baseRootResolver);
         Path normalizedProjectRoot = Objects.requireNonNull(projectRoot, "projectRoot must not be null")
                 .toAbsolutePath().normalize();
         if (!absolutePath.startsWith(normalizedProjectRoot)) {

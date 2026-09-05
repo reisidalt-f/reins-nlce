@@ -13,12 +13,14 @@ package br.com.dizeno.reins.reasoning.inference.llm.providers.ollama;
 
 import java.io.IOException;
 
+import br.com.dizeno.reins.reasoning.inference.llm.error.LlmEmptyResponseException;
+
 /**
  * OllamaEmptyResponseException is part of the general application functions in
  * the reins architecture.
  * Acts as a exception representing errors in its prefix operations.
  */
-public class OllamaEmptyResponseException extends IOException {
+public class OllamaEmptyResponseException extends LlmEmptyResponseException {
     private final int totalAttempts;
     private final int noUsableContentCount;
 

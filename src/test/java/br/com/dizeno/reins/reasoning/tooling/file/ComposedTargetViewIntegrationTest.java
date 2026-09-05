@@ -31,7 +31,7 @@ class ComposedTargetViewIntegrationTest {
     private FileComposedViewFixture fixture;
     private br.com.dizeno.reins.reasoning.tooling.file.BasePathMappingSet mappings;
     private br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver resolver;
-    private br.com.dizeno.reins.reasoning.tooling.ToolingService mcpService;
+    private br.com.dizeno.reins.reasoning.tooling.ToolingService toolingService;
 
     @BeforeEach
     void setUp() {
@@ -46,7 +46,7 @@ class ComposedTargetViewIntegrationTest {
         
 
         resolver = new br.com.dizeno.reins.reasoning.tooling.file.BasePathResolver(mappings, new br.com.dizeno.reins.security.PathValidator(tempDir));
-        mcpService = new br.com.dizeno.reins.reasoning.tooling.ToolingService();
+        toolingService = new br.com.dizeno.reins.reasoning.tooling.ToolingService();
     }
 
     
@@ -70,7 +70,7 @@ class ComposedTargetViewIntegrationTest {
             request.setBase("target");  
             request.setPath(".");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "test");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "test");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -95,7 +95,7 @@ class ComposedTargetViewIntegrationTest {
             request.setBase("target");
             request.setPath(".");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "test");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "test");
 
             
             List<String> listed = result.getListedPaths();
@@ -123,7 +123,7 @@ class ComposedTargetViewIntegrationTest {
             request.setBase("target");
             request.setPath("TestHelper.compiled.java");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "test");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "test");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -145,7 +145,7 @@ class ComposedTargetViewIntegrationTest {
             request.setBase("target");
             request.setPath("Manager.compiled.java");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "test");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "test");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -167,7 +167,7 @@ class ComposedTargetViewIntegrationTest {
             request.setBase("target");
             request.setPath("Common.compiled.java");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "test");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "test");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -196,7 +196,7 @@ class ComposedTargetViewIntegrationTest {
             request.setBase("target");
             request.setPath(".");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "main");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "main");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
@@ -219,7 +219,7 @@ class ComposedTargetViewIntegrationTest {
             request.setBase("target");
             request.setPath("TestHelper.compiled.java");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "main");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "main");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.ERROR, result.getStatus());
@@ -247,7 +247,7 @@ class ComposedTargetViewIntegrationTest {
             request.setBase("target");
             request.setPath("compiled");
 
-            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = mcpService.executeWithScope(request, resolver, "test");
+            br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = toolingService.executeWithScope(request, resolver, "test");
 
             
             assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());

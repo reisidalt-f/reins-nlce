@@ -34,19 +34,19 @@ public final class ReasoningScriptContext {
     private final ReasoningScriptViews.ToolResultView currentToolResult;
 
     private ReasoningScriptContext(Builder b) {
-        this.source = b.source;
-        this.fileBases = b.fileBases;
-        this.tracking = b.tracking;
+        this.source = b.source != null ? b.source : ReasoningScriptViews.emptySource();
+        this.fileBases = b.fileBases != null ? b.fileBases : ReasoningScriptViews.emptyFileBases();
+        this.tracking = b.tracking != null ? b.tracking : ReasoningScriptViews.emptyTracking();
         this.referenceTree = b.referenceTree != null ? b.referenceTree : "";
-        this.inference = b.inference;
+        this.inference = b.inference != null ? b.inference : ReasoningScriptViews.emptyInferenceState();
         this.attachments = b.attachments != null
                 ? Collections.unmodifiableList(b.attachments)
                 : Collections.emptyList();
-        this.config = b.config;
-        this.cycle = b.cycle;
-        this.policy = b.policy;
-        this.pipeline = b.pipeline;
-        this.currentToolResult = b.currentToolResult;
+        this.config = b.config != null ? b.config : ReasoningScriptViews.emptyConfig();
+        this.cycle = b.cycle != null ? b.cycle : ReasoningScriptViews.emptyCycle();
+        this.policy = b.policy != null ? b.policy : ReasoningScriptViews.emptyPolicy();
+        this.pipeline = b.pipeline != null ? b.pipeline : ReasoningScriptViews.emptyPipeline();
+        this.currentToolResult = b.currentToolResult != null ? b.currentToolResult : ReasoningScriptViews.emptyToolResult();
     }
 
     public ReasoningScriptViews.SourceView getSource() { return source; }

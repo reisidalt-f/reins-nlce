@@ -35,6 +35,10 @@ public class ToolInfoPhraseTemplateRegistry {
         templates.put(ToolExecutionRequest.Operation.WRITE_FILE, "Write of file <path> to <intention>");
         templates.put(ToolExecutionRequest.Operation.PATCH_FILE, "Patch of file <path> to <intention>");
         templates.put(ToolExecutionRequest.Operation.DELETE_FILE, "Delete of file <path> to <intention>");
+        templates.put(ToolExecutionRequest.Operation.APPEND_FILE, "Append to file <path> to <intention>");
+        templates.put(ToolExecutionRequest.Operation.PREPEND_FILE, "Prepend to file <path> to <intention>");
+        templates.put(ToolExecutionRequest.Operation.MOVE_FILE, "Move of file <path> to <intention>");
+        templates.put(ToolExecutionRequest.Operation.COPY_FILE, "Copy of file <path> to <intention>");
         templates.put(ToolExecutionRequest.Operation.LIST_COMPILED_FILES,
                 "List of compiled files for <path> to <intention>");
         templates.put(ToolExecutionRequest.Operation.RUN_SCRIPT, "Run of script <path> to <intention>");

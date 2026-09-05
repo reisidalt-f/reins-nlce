@@ -42,6 +42,7 @@ public record ReprocessingDecision(String sourcePath,
         PRIOR_RECORD_PENDING_NOTES,
         SKIP_UP_TO_DATE,
          
-        NOTES_BACKTRACK
+        NOTES_BACKTRACK,
+        FRESH_COMPILATION
     }
 }

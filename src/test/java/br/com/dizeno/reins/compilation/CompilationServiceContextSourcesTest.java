@@ -138,69 +138,6 @@ class CompilationServiceContextSourcesTest {
 
     
 
-    @Test
-    void projectFilesAndSources_projectContentBeforeSourcesInPayload() throws Exception {
-        Path projectCtx = write("src/project.md", "# Compilation background file");
-        Path sourceDoc = write("docs/api.md", "# API context");
-        Path nlSource = write("src/main/nl/domain.md", "# domain");
-
-        ProjectContextService realContext = new ProjectContextService();
-        ReasoningService reasoningService = mock(ReasoningService.class);
-
-        
-        ArgumentCaptor<ReasoningRequest> requestCaptor = ArgumentCaptor.forClass(ReasoningRequest.class);
-        when(reasoningService.runCycle(requestCaptor.capture(), any())).thenReturn(finishSuccessResult());
-
-        CompilationService service = buildService(reasoningService, realContext, nlSource);
-        ReinsConfig config = projectAndSourcesConfig(projectCtx.toFile(), List.of(sourceDoc.toFile()));
-        Log log = mock(Log.class);
-
-        service.processFiles(List.of(nlSource.toFile()), config, tempDir, log);
-
-        ReasoningRequest captured = requestCaptor.getValue();
-        List<CompilationBackgroundFile> files = captured.getCompilationBackgroundPayload().getFiles();
-        assertFalse(files.isEmpty(), "Expected context payload to contain files");
-        
-        assertEquals("src/project.md", files.get(0).getDisplayPath(),
-                "Compilation background file must appear first in payload");
-        
-        boolean hasApiDoc = files.stream().anyMatch(f -> f.getDisplayPath().contains("api.md"));
-        assertTrue(hasApiDoc, "Source doc api.md must appear in payload");
-        int projectIdx = indexOf(files, "src/project.md");
-        int apiIdx = indexOfPartial(files, "api.md");
-        assertTrue(projectIdx < apiIdx, "project.md must appear before api.md in payload");
-    }
-
-    @Test
-    void sameFileInProjectAndSources_appearsOnce() throws Exception {
-        
-        Path shared = write("docs/shared.md", "# Shared content");
-        Path projectCtx = write("src/project.md", "[../docs/shared.md]");
-        Path nlSource = write("src/main/nl/domain.md", "# domain");
-
-        ProjectContextService realContext = new ProjectContextService();
-        ReasoningService reasoningService = mock(ReasoningService.class);
-
-        ArgumentCaptor<ReasoningRequest> requestCaptor = ArgumentCaptor.forClass(ReasoningRequest.class);
-        when(reasoningService.runCycle(requestCaptor.capture(), any())).thenReturn(finishSuccessResult());
-
-        CompilationService service = buildService(reasoningService, realContext, nlSource);
-        ReinsConfig config = projectAndSourcesConfig(projectCtx.toFile(), List.of(shared.toFile()));
-        Log log = mock(Log.class);
-
-        service.processFiles(List.of(nlSource.toFile()), config, tempDir, log);
-
-        ReasoningRequest captured = requestCaptor.getValue();
-        List<CompilationBackgroundFile> files = captured.getCompilationBackgroundPayload().getFiles();
-        long sharedCount = files.stream()
-                .filter(f -> f.getDisplayPath().endsWith("shared.md"))
-                .count();
-        assertEquals(1, sharedCount,
-                "shared.md referenced by both project tree and context.sources must appear exactly once; got " + sharedCount);
-    }
-
-    
-
     private Path write(String relative, String content) throws Exception {
         Path file = tempDir.resolve(relative);
         Files.createDirectories(file.getParent());
@@ -216,33 +153,18 @@ class CompilationServiceContextSourcesTest {
         reasoning.setMaxTurns(1);
         config.setReasoning(reasoning);
         ContextSettings ctx = new ContextSettings();
-        ctx.setIncludeProjectFiles(false);
-        ctx.setSources(sources);
+        List<ContextSourceSpec> specs = sources == null ? List.of() : sources.stream().map(ContextSourceSpec::new).toList();
+        ctx.setSources(specs);
         config.setContext(ctx);
         LoggingSettings logging = new LoggingSettings();
         logging.setFileListingAndReading(true);
         config.setLogging(logging);
-        config.setProjectContextFile(tempDir.resolve("project.md").toFile()); 
-        config.setMainNlRoot(tempDir.resolve("src/main/nl").toFile());
-        config.setTestNlRoot(tempDir.resolve("src/test/nl").toFile());
-        return config;
-    }
-
-    private ReinsConfig projectAndSourcesConfig(File projectFile, List<File> sources) {
-        ReinsConfig config = new ReinsConfig();
-        config.setFailOnError(false);
-        config.setEnableProjectInference(true);
-        ReasoningSettings reasoning = new ReasoningSettings();
-        reasoning.setEnabled(true);
-        reasoning.setMaxTurns(1);
-        config.setReasoning(reasoning);
-        ContextSettings ctx = new ContextSettings();
-        ctx.setIncludeProjectFiles(true);
-        ctx.setSources(sources);
-        config.setContext(ctx);
-        config.setProjectContextFile(projectFile);
-        config.setMainNlRoot(tempDir.resolve("src/main/nl").toFile());
-        config.setTestNlRoot(tempDir.resolve("src/test/nl").toFile());
+        config.setSourceBase("main", tempDir.resolve("src/main/nl").toFile());
+        config.setSourceBase("test", tempDir.resolve("src/test/nl").toFile());
+        TargetSettings target = new TargetSettings();
+        target.setTargetBase("main", "src/main/java");
+        target.setTargetBase("test", "src/test/java");
+        config.setTarget(target);
         return config;
     }
 
@@ -257,7 +179,7 @@ class CompilationServiceContextSourcesTest {
 
         MarkdownDependencyGraphBuilder graphBuilder = mock(MarkdownDependencyGraphBuilder.class);
         ProcessingOrderResolver orderResolver = mock(ProcessingOrderResolver.class);
-        when(graphBuilder.build(any(), any(), any())).thenReturn(graph);
+        when(graphBuilder.build(any(), any(), any(), any())).thenReturn(graph);
         when(orderResolver.resolve(graph)).thenReturn(List.of(relPath));
 
         CompilationTrackingStore store = mock(CompilationTrackingStore.class);
@@ -272,8 +194,7 @@ class CompilationServiceContextSourcesTest {
                 graphBuilder,
                 orderResolver,
                 reasoningService,
-                contextService,
-                null
+                contextService
         );
     }
 
@@ -284,19 +205,5 @@ class CompilationServiceContextSourcesTest {
         result.setWrittenPaths(List.of());
         result.setToolInfoPhrases(List.of());
         return result;
-    }
-
-    private int indexOf(List<CompilationBackgroundFile> files, String displayPath) {
-        for (int i = 0; i < files.size(); i++) {
-            if (files.get(i).getDisplayPath().equals(displayPath)) return i;
-        }
-        return -1;
-    }
-
-    private int indexOfPartial(List<CompilationBackgroundFile> files, String partial) {
-        for (int i = 0; i < files.size(); i++) {
-            if (files.get(i).getDisplayPath().contains(partial)) return i;
-        }
-        return -1;
     }
 }

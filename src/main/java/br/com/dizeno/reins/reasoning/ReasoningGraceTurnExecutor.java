@@ -161,16 +161,21 @@ public class ReasoningGraceTurnExecutor {
         ResponseDirective graceDirective = graceParsed.getDirective();
         graceInbound.setDirective(graceDirective);
 
-        if (graceDirective.isValid()
-                && graceDirective.getContentType() == ResponseDirective.ContentType.MESSAGE_TO_USER
-                && graceParsed.getBody() != null
-                && !graceParsed.getBody().isBlank()) {
-            userFacingMessages.add(graceParsed.getBody().trim());
-            if (request.getUserMessageListener() != null) {
-                try {
-                    request.getUserMessageListener().accept(graceParsed.getBody().trim());
-                } catch (Exception ignored) {
-
+        List<ResponseDirectiveParser.ParseResult> graceBlocks = graceParsed.getBlocks();
+        if (graceBlocks != null) {
+            for (ResponseDirectiveParser.ParseResult block : graceBlocks) {
+                ResponseDirective bd = block.getDirective();
+                if (bd.isValid()
+                        && bd.getContentType() == ResponseDirective.ContentType.MESSAGE_TO_USER
+                        && block.getBody() != null
+                        && !block.getBody().isBlank()) {
+                    userFacingMessages.add(block.getBody().trim());
+                    if (request.getUserMessageListener() != null) {
+                        try {
+                            request.getUserMessageListener().accept(block.getBody().trim());
+                        } catch (Exception ignored) {
+                        }
+                    }
                 }
             }
         }
@@ -230,13 +235,7 @@ public class ReasoningGraceTurnExecutor {
         inferenceRequest.setSourceBase(configResolver.resolveSourceBase(request.getSourceScope()));
         String sourcePath = request.getSourcePath();
         if (sourcePath != null) {
-            if (sourcePath.startsWith("src/main/nl/")) {
-                inferenceRequest.setSourceRelativePath(sourcePath.substring("src/main/nl/".length()));
-            } else if (sourcePath.startsWith("src/test/nl/")) {
-                inferenceRequest.setSourceRelativePath(sourcePath.substring("src/test/nl/".length()));
-            } else {
-                inferenceRequest.setSourceRelativePath(sourcePath);
-            }
+            inferenceRequest.setSourceRelativePath(sourcePath);
         }
         inferenceRequest.setSourceHash(request.getSourceHash());
         inferenceRequest.setConversationHistory(conversationHistory);
@@ -244,7 +243,7 @@ public class ReasoningGraceTurnExecutor {
         inferenceRequest.setUseCachedContent(request.isUseCachedContent());
         inferenceRequest.setPromptTemplateVersion("reasoning-v1");
         inferenceRequest.setModelConfigSnapshot(
-                request.getModelConfigSnapshot() == null ? config.getGemini() : request.getModelConfigSnapshot());
+                request.getModelConfigSnapshot() == null ? config.resolveActiveModelSettings() : request.getModelConfigSnapshot());
         return inferenceRequest;
     }
 }

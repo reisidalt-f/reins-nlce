@@ -28,89 +28,117 @@ public class BasePathMappingSet {
     private Path mainTargetRoot;
     private Path testTargetRoot;
     private Path scriptRoot;
+    private final java.util.Map<String, Path> sourceRoots = new java.util.LinkedHashMap<>();
+    private final java.util.Map<String, Path> targetRoots = new java.util.LinkedHashMap<>();
 
-    /**
-     * From Config.
-     *
-     * @param config the Reins configuration settings
-     * @param projectRoot the root path of the project
-     * @return the collection of elements
-     */
     public static BasePathMappingSet fromConfig(ReinsConfig config, Path projectRoot) {
         BasePathMappingSet mappings = new BasePathMappingSet();
-        mappings.setMainRoot(resolveBaseRoot(config.getMainNlRoot(), projectRoot.resolve("src/main/nl"), projectRoot));
-        mappings.setTestRoot(resolveBaseRoot(config.getTestNlRoot(), projectRoot.resolve("src/test/nl"), projectRoot));
-        mappings.setTargetRoot(config.getTarget() != null
-            ? config.getTarget().resolveProjectTarget(projectRoot)
-                : projectRoot.toAbsolutePath().normalize());
-        mappings.setScriptRoot(resolveScriptRoot(config, projectRoot));
-        return mappings;
-    }
-
-     
-    /**
-     * For Scope.
-     *
-     * @param config the Reins configuration settings
-     * @param projectRoot the root path of the project
-     * @param sourceScope the source scope
-     * @return the collection of elements
-     */
-    public static BasePathMappingSet forScope(ReinsConfig config, Path projectRoot, String sourceScope) {
-        BasePathMappingSet mappings = new BasePathMappingSet();
-        mappings.setMainRoot(resolveBaseRoot(config.getMainNlRoot(), projectRoot.resolve("src/main/nl"), projectRoot));
-        mappings.setTestRoot(resolveBaseRoot(config.getTestNlRoot(), projectRoot.resolve("src/test/nl"), projectRoot));
-        if (config.getTarget() == null) {
-            Path project = projectRoot.toAbsolutePath().normalize();
-            mappings.setMainTargetRoot(project);
-            mappings.setTestTargetRoot(project);
-            mappings.setTargetRoot(project);
-        } else if ("main".equals(sourceScope)) {
-            mappings.setMainTargetRoot(config.getTarget().resolveMainOutput(projectRoot));
-            mappings.setTestTargetRoot(config.getTarget().resolveTestOutput(projectRoot));
-            mappings.setTargetRoot(mappings.getMainTargetRoot());
-        } else if ("test".equals(sourceScope)) {
-            mappings.setMainTargetRoot(config.getTarget().resolveMainOutput(projectRoot));
-            mappings.setTestTargetRoot(config.getTarget().resolveTestOutput(projectRoot));
-            mappings.setTargetRoot(mappings.getTestTargetRoot());
+        if (config != null && config.getSourceBases() != null) {
+            for (java.util.Map.Entry<String, File> entry : config.getSourceBases().entrySet()) {
+                if (entry.getValue() != null) {
+                    Path rootPath = resolveBaseRoot(entry.getValue(), projectRoot);
+                    mappings.setSourceRoot(entry.getKey(), rootPath);
+                    if ("main".equals(entry.getKey())) mappings.setMainRoot(rootPath);
+                    else if ("test".equals(entry.getKey())) mappings.setTestRoot(rootPath);
+                }
+            }
+        }
+        if (config != null && config.getTarget() != null) {
+            mappings.setTargetRoot(projectRoot.toAbsolutePath().normalize());
+            if (config.getTarget().getTargetBases() != null) {
+                for (java.util.Map.Entry<String, String> entry : config.getTarget().getTargetBases().entrySet()) {
+                    if (entry.getValue() != null) {
+                        try {
+                            mappings.setTargetRoot(entry.getKey(), config.getTarget().resolveTargetOutput(entry.getKey(), projectRoot));
+                        } catch (Exception ex) {
+                            // ignore fallback
+                        }
+                    }
+                }
+            }
         } else {
-            Path projectTarget = config.getTarget().resolveProjectTarget(projectRoot);
-            mappings.setMainTargetRoot(config.getTarget().resolveMainOutput(projectRoot));
-            mappings.setTestTargetRoot(config.getTarget().resolveTestOutput(projectRoot));
-            mappings.setTargetRoot(projectTarget);
+            mappings.setTargetRoot(projectRoot.toAbsolutePath().normalize());
         }
         mappings.setScriptRoot(resolveScriptRoot(config, projectRoot));
         return mappings;
     }
 
-     
-    /**
-     * For Project Inference.
-     *
-     * @param projectRoot the root path of the project
-     * @param targetRoot the target root
-     * @return the collection of elements
-     */
-    public static BasePathMappingSet forProjectInference(Path projectRoot, Path targetRoot) {
-        return forProjectInference(projectRoot, targetRoot, null);
-    }
+    public static BasePathMappingSet forScope(ReinsConfig config, Path projectRoot, String sourceScope) {
+        BasePathMappingSet mappings = fromConfig(config, projectRoot);
 
-    /**
-     * For Project Inference.
-     *
-     * @param projectRoot the root path of the project
-     * @param targetRoot the target root
-     * @param scriptRoot the script root
-     * @return the collection of elements
-     */
-    public static BasePathMappingSet forProjectInference(Path projectRoot, Path targetRoot, Path scriptRoot) {
-        BasePathMappingSet mappings = new BasePathMappingSet();
-        mappings.setMainRoot(projectRoot.toAbsolutePath().normalize());
-        mappings.setTargetRoot(targetRoot.toAbsolutePath().normalize());
-        mappings.setTestRoot(null);
-        mappings.setScriptRoot(scriptRoot == null ? null : scriptRoot.toAbsolutePath().normalize());
+        if (config.getTarget() == null) {
+            throw new IllegalStateException("Target configuration is missing; target output directory must be defined.");
+        }
+
+        Path activeTarget = config.getTarget().resolveTargetOutput(sourceScope, projectRoot);
+        mappings.setTargetRoot(activeTarget);
+        try {
+            mappings.setMainTargetRoot(config.getTarget().resolveTargetOutput("main", projectRoot));
+        } catch (Exception ex) {
+            mappings.setMainTargetRoot(activeTarget);
+        }
+        try {
+            mappings.setTestTargetRoot(config.getTarget().resolveTargetOutput("test", projectRoot));
+        } catch (Exception ex) {
+            mappings.setTestTargetRoot(activeTarget);
+        }
+
+        mappings.setScriptRoot(resolveScriptRoot(config, projectRoot));
         return mappings;
     }
+
+    public java.util.Map<String, Path> getSourceRoots() {
+        return java.util.Collections.unmodifiableMap(sourceRoots);
+    }
+
+    public java.util.Map<String, Path> getTargetRoots() {
+        return java.util.Collections.unmodifiableMap(targetRoots);
+    }
+
+    public Path getSourceRoot(String name) {
+        if (name == null) return null;
+        String normalized = name.trim().toLowerCase(java.util.Locale.ROOT);
+        if (sourceRoots.containsKey(normalized)) {
+            return sourceRoots.get(normalized);
+        }
+        return switch (normalized) {
+            case "main" -> mainRoot;
+            case "test" -> testRoot;
+            default -> null;
+        };
+    }
+
+    public void setSourceRoot(String name, Path path) {
+        if (name == null || name.isBlank()) return;
+        String normalized = name.trim().toLowerCase(java.util.Locale.ROOT);
+        sourceRoots.put(normalized, path);
+        if ("main".equals(normalized)) this.mainRoot = path;
+        else if ("test".equals(normalized)) this.testRoot = path;
+    }
+
+    public Path getTargetRoot(String name) {
+        if (name == null) return targetRoot;
+        String normalized = name.trim().toLowerCase(java.util.Locale.ROOT);
+        if (targetRoots.containsKey(normalized)) {
+            return targetRoots.get(normalized);
+        }
+        return switch (normalized) {
+            case "main" -> mainTargetRoot != null ? mainTargetRoot : targetRoot;
+            case "test" -> testTargetRoot != null ? testTargetRoot : targetRoot;
+            case "target" -> targetRoot;
+            default -> targetRoot;
+        };
+    }
+
+    public void setTargetRoot(String name, Path path) {
+        if (name == null || name.isBlank()) return;
+        String normalized = name.trim().toLowerCase(java.util.Locale.ROOT);
+        targetRoots.put(normalized, path);
+        if ("target".equals(normalized)) this.targetRoot = path;
+        else if ("main".equals(normalized)) this.mainTargetRoot = path;
+        else if ("test".equals(normalized)) this.testTargetRoot = path;
+    }
+
 
     private static Path resolveScriptRoot(ReinsConfig config, Path projectRoot) {
         if (config == null || config.getReasoning() == null) {
@@ -127,9 +155,9 @@ public class BasePathMappingSet {
         return projectRoot.resolve(configured).toAbsolutePath().normalize();
     }
 
-    private static Path resolveBaseRoot(File configuredRoot, Path defaultRoot, Path projectRoot) {
+    private static Path resolveBaseRoot(File configuredRoot, Path projectRoot) {
         if (configuredRoot == null) {
-            return defaultRoot.toAbsolutePath().normalize();
+            return null;
         }
         Path configuredPath = configuredRoot.toPath();
         if (configuredPath.isAbsolute()) {
@@ -138,56 +166,26 @@ public class BasePathMappingSet {
         return projectRoot.resolve(configuredPath).toAbsolutePath().normalize();
     }
 
-    /**
-     * Gets the main root.
-     *
-     * @return the resolved or constructed object
-     */
     public Path getMainRoot() {
         return mainRoot;
     }
 
-    /**
-     * Sets the main root.
-     *
-     * @param mainRoot the main root
-     */
     public void setMainRoot(Path mainRoot) {
         this.mainRoot = mainRoot;
     }
 
-    /**
-     * Gets the test root.
-     *
-     * @return the resolved or constructed object
-     */
     public Path getTestRoot() {
         return testRoot;
     }
 
-    /**
-     * Sets the test root.
-     *
-     * @param testRoot the test root
-     */
     public void setTestRoot(Path testRoot) {
         this.testRoot = testRoot;
     }
 
-    /**
-     * Gets the target root.
-     *
-     * @return the resolved or constructed object
-     */
     public Path getTargetRoot() {
         return targetRoot;
     }
 
-    /**
-     * Sets the target root.
-     *
-     * @param targetRoot the target root
-     */
     public void setTargetRoot(Path targetRoot) {
         this.targetRoot = targetRoot;
         if (targetRoot == null) {
@@ -209,67 +207,30 @@ public class BasePathMappingSet {
         }
     }
 
-    /**
-     * Gets the main target root.
-     *
-     * @return the resolved or constructed object
-     */
     public Path getMainTargetRoot() {
         return mainTargetRoot;
     }
 
-    /**
-     * Sets the main target root.
-     *
-     * @param mainTargetRoot the main target root
-     */
     public void setMainTargetRoot(Path mainTargetRoot) {
         this.mainTargetRoot = mainTargetRoot;
     }
 
-    /**
-     * Gets the test target root.
-     *
-     * @return the resolved or constructed object
-     */
     public Path getTestTargetRoot() {
         return testTargetRoot;
     }
 
-    /**
-     * Sets the test target root.
-     *
-     * @param testTargetRoot the test target root
-     */
     public void setTestTargetRoot(Path testTargetRoot) {
         this.testTargetRoot = testTargetRoot;
     }
 
-    /**
-     * Gets the script root.
-     *
-     * @return the resolved or constructed object
-     */
     public Path getScriptRoot() {
         return scriptRoot;
     }
 
-    /**
-     * Sets the script root.
-     *
-     * @param scriptRoot the script root
-     */
     public void setScriptRoot(Path scriptRoot) {
         this.scriptRoot = scriptRoot;
     }
 
-     
-    /**
-     * Gets the composed source bases.
-     *
-     * @param sourceScope the source scope
-     * @return the resolved or constructed object
-     */
     public Path[] getComposedSourceBases(String sourceScope) {
         if ("test".equals(sourceScope) && testRoot != null) {
             return new Path[]{testRoot, mainRoot};
@@ -277,13 +238,6 @@ public class BasePathMappingSet {
         return new Path[]{mainRoot};
     }
 
-     
-    /**
-     * Gets the composed target bases.
-     *
-     * @param sourceScope the source scope
-     * @return the resolved or constructed object
-     */
     public Path[] getComposedTargetBases(String sourceScope) {
         if ("test".equals(sourceScope)) {
             java.util.LinkedHashSet<Path> composed = new java.util.LinkedHashSet<>();
@@ -302,12 +256,6 @@ public class BasePathMappingSet {
         return main == null ? new Path[0] : new Path[]{main};
     }
 
-    /**
-     * Gets the active target root.
-     *
-     * @param sourceScope the source scope
-     * @return the resolved or constructed object
-     */
     public Path getActiveTargetRoot(String sourceScope) {
         if ("test".equals(sourceScope)) {
             return testTargetRoot != null ? testTargetRoot : targetRoot;
@@ -318,13 +266,6 @@ public class BasePathMappingSet {
         return targetRoot;
     }
 
-     
-    /**
-     * Checks if the component is composition enabled.
-     *
-     * @param sourceScope the source scope
-     * @return true if successful or matching, false otherwise
-     */
     public boolean isCompositionEnabled(String sourceScope) {
         return "test".equals(sourceScope) && testRoot != null;
     }

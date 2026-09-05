@@ -13,6 +13,7 @@ package br.com.dizeno.reins.reasoning.inference.llm.providers.gemini;
 
 import br.com.dizeno.reins.reasoning.scripting.ConversationMessage;
 import br.com.dizeno.reins.reasoning.scripting.AttachedFilePayload;
+import br.com.dizeno.reins.run.config.settings.ContextSettings;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -136,7 +137,7 @@ public class GeminiClient {
                 .build();
 
         String url = params.endpoint() + "/v1beta/models/" + params.model() + ":compileContent?key=" + params.apiKey();
-        SystemAndContents normalized = splitSystemAndContents(conversationHistory);
+        SystemAndContents normalized = splitSystemAndContents(conversationHistory, params == null ? null : params.contextSettings());
         Map<String, Object> bodyPayload = new HashMap<>();
         bodyPayload.put("contents", normalized.contents());
         bodyPayload.put("generation", buildGeneration(params));
@@ -192,7 +193,7 @@ public class GeminiClient {
                 .build();
 
         String url = params.endpoint() + "/v1beta/cachedContents?key=" + params.apiKey();
-        SystemAndContents normalized = splitSystemAndContents(systemMessages);
+        SystemAndContents normalized = splitSystemAndContents(systemMessages, params == null ? null : params.contextSettings());
 
         Map<String, Object> bodyPayload = new HashMap<>();
         bodyPayload.put("model", "models/" + params.model());
@@ -269,7 +270,7 @@ public class GeminiClient {
         return config;
     }
 
-    private List<Map<String, Object>> buildContents(List<ConversationMessage> conversationHistory) {
+    private List<Map<String, Object>> buildContents(List<ConversationMessage> conversationHistory, ContextSettings contextSettings) {
         List<Map<String, Object>> contents = new ArrayList<>();
         for (ConversationMessage msg : conversationHistory) {
             if (msg.getRole() == ConversationMessage.Role.SYSTEM) {
@@ -283,19 +284,30 @@ public class GeminiClient {
             if (msg.getAttachments() != null) {
                 for (AttachedFilePayload attachment : msg.getAttachments()) {
                     String content = attachment.getContent() == null ? "" : attachment.getContent();
-                    String encoded = Base64.getEncoder().encodeToString(content.getBytes(StandardCharsets.UTF_8));
-                    if (attachment.getBase() != null && attachment.getRelativePath() != null) {
-                        parts.add(Map.of("text", "Content of " + attachment.getBase() + ":" + attachment.getRelativePath() + ":"));
+                    boolean isPlain = contextSettings != null
+                            ? contextSettings.isPlainAttachment(attachment.getRelativePath())
+                            : new ContextSettings().isPlainAttachment(attachment.getRelativePath());
+
+                    if (isPlain) {
+                        if (attachment.getBase() != null && attachment.getRelativePath() != null) {
+                            parts.add(Map.of("text", "Content of " + attachment.getBase() + ":" + attachment.getRelativePath() + ":\n" + content));
+                        } else {
+                            parts.add(Map.of("text", content));
+                        }
+                    } else {
+                        String encoded = Base64.getEncoder().encodeToString(content.getBytes(StandardCharsets.UTF_8));
+                        if (attachment.getBase() != null && attachment.getRelativePath() != null) {
+                            parts.add(Map.of("text", "Content of " + attachment.getBase() + ":" + attachment.getRelativePath() + ":"));
+                        }
+                        Map<String, Object> inlineData = new LinkedHashMap<>();
+                        inlineData.put("mimeType", "text/markdown");
+                        inlineData.put("data", encoded);
+                        parts.add(Map.of("inlineData", inlineData));
                     }
-                    Map<String, Object> inlineData = new LinkedHashMap<>();
-                    inlineData.put("mimeType", "text/markdown");
-                    inlineData.put("data", encoded);
-                    parts.add(Map.of("inlineData", inlineData));
                 }
             }
 
             if (parts.isEmpty()) {
-                
                 parts.add(Map.of("text", ""));
             }
 
@@ -307,7 +319,7 @@ public class GeminiClient {
         return contents;
     }
 
-    private List<Map<String, Object>> buildSystemParts(List<ConversationMessage> conversationHistory) {
+    private List<Map<String, Object>> buildSystemParts(List<ConversationMessage> conversationHistory, ContextSettings contextSettings) {
         List<Map<String, Object>> parts = new ArrayList<>();
         if (conversationHistory == null) {
             return parts;
@@ -322,25 +334,38 @@ public class GeminiClient {
             if (msg.getAttachments() != null) {
                 for (AttachedFilePayload attachment : msg.getAttachments()) {
                     String content = attachment.getContent() == null ? "" : attachment.getContent();
-                    String encoded = Base64.getEncoder().encodeToString(content.getBytes(StandardCharsets.UTF_8));
-                    if (attachment.getBase() != null && attachment.getRelativePath() != null) {
-                        parts.add(Map.of("text", "Content of " + attachment.getBase() + ":" + attachment.getRelativePath() + ":"));
+                    boolean isPlain = contextSettings != null
+                            ? contextSettings.isPlainAttachment(attachment.getRelativePath())
+                            : new ContextSettings().isPlainAttachment(attachment.getRelativePath());
+
+                    if (isPlain) {
+                        if (attachment.getBase() != null && attachment.getRelativePath() != null) {
+                            parts.add(Map.of("text", "Content of " + attachment.getBase() + ":" + attachment.getRelativePath() + ":\n" + content));
+                        } else {
+                            parts.add(Map.of("text", content));
+                        }
+                    } else {
+                        String encoded = Base64.getEncoder().encodeToString(content.getBytes(StandardCharsets.UTF_8));
+                        if (attachment.getBase() != null && attachment.getRelativePath() != null) {
+                            parts.add(Map.of("text", "Content of " + attachment.getBase() + ":" + attachment.getRelativePath() + ":"));
+                        }
+                        Map<String, Object> inlineData = new LinkedHashMap<>();
+                        inlineData.put("mimeType", "text/markdown");
+                        inlineData.put("data", encoded);
+                        parts.add(Map.of("inlineData", inlineData));
                     }
-                    Map<String, Object> inlineData = new LinkedHashMap<>();
-                    inlineData.put("mimeType", "text/markdown");
-                    inlineData.put("data", encoded);
-                    parts.add(Map.of("inlineData", inlineData));
                 }
             }
         }
         return parts;
     }
 
-    private SystemAndContents splitSystemAndContents(List<ConversationMessage> conversationHistory) {
-        List<Map<String, Object>> systemParts = buildSystemParts(conversationHistory);
-        List<Map<String, Object>> contents = buildContents(conversationHistory);
+    private SystemAndContents splitSystemAndContents(List<ConversationMessage> conversationHistory, ContextSettings contextSettings) {
+        List<Map<String, Object>> systemParts = buildSystemParts(conversationHistory, contextSettings);
+        List<Map<String, Object>> contents = buildContents(conversationHistory, contextSettings);
         return new SystemAndContents(systemParts, contents);
     }
+
 
     private String normalizeCachedContentName(String cachedContentId) {
         if (cachedContentId.startsWith("cachedContents/")) {

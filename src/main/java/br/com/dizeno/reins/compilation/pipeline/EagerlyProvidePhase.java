@@ -49,10 +49,11 @@ public final class EagerlyProvidePhase implements CompilationPhase {
 
     private EagerlyProvideResult buildEagerlyProvideResult(SourceCompilationContext ctx) throws Exception {
         EagerlyProvideSettings settings = ctx.getConfig().getEagerlyProvide();
+        ContextSettings contextSettings = ctx.getConfig().getContext();
         boolean eagerlyProvidedLoggingEnabled = ctx.getConfig().getLogging() != null && ctx.getConfig().getLogging().isEagerlyProvided();
-        if (settings == null
-                || (!settings.isPreviouslyCompiledFiles() && !settings.isPreviouslyInspectedFiles())) {
-            return ctx.getEagerlyProvideService().build(ctx.getPriorRecord(), settings, eagerlyProvidedLoggingEnabled, ctx.getProjectRoot(), ctx.getValidator(), ctx.getLog());
+        if (contextSettings == null
+                || (!contextSettings.isCompiledFiles() && !contextSettings.isInspectedFiles())) {
+            return ctx.getEagerlyProvideService().build(ctx.getPriorRecord(), settings, contextSettings, eagerlyProvidedLoggingEnabled, ctx.getProjectRoot(), ctx.getValidator(), ctx.getLog());
         }
 
         LinkedHashMap<String, AttachedFilePayload> compiledAttachments = new LinkedHashMap<>();
@@ -62,7 +63,7 @@ public final class EagerlyProvidePhase implements CompilationPhase {
         groupedSources.put(ctx.getCanonicalSourcePath(), emptyGroupFor(ctx.getCanonicalSourcePath()));
 
         mergeEagerlyProvidedAttachments(
-            ctx.getEagerlyProvideService().build(ctx.getPriorRecord(), settings, eagerlyProvidedLoggingEnabled, ctx.getProjectRoot(), ctx.getValidator(), ctx.getLog()),
+            ctx.getEagerlyProvideService().build(ctx.getPriorRecord(), settings, contextSettings, eagerlyProvidedLoggingEnabled, ctx.getProjectRoot(), ctx.getValidator(), ctx.getLog()),
                 compiledAttachments,
                 inspectedAttachments,
                 groupedSources);
@@ -81,7 +82,7 @@ public final class EagerlyProvidePhase implements CompilationPhase {
                 continue;
             }
             mergeEagerlyProvidedAttachments(
-                    ctx.getEagerlyProvideService().build(referencedRecord, settings, eagerlyProvidedLoggingEnabled, ctx.getProjectRoot(), ctx.getValidator(), ctx.getLog()),
+                    ctx.getEagerlyProvideService().build(referencedRecord, settings, contextSettings, eagerlyProvidedLoggingEnabled, ctx.getProjectRoot(), ctx.getValidator(), ctx.getLog()),
                     compiledAttachments,
                     inspectedAttachments,
                     groupedSources);

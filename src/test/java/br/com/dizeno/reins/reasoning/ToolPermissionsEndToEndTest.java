@@ -29,7 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
  
-class McpPermissionsEndToEndTest {
+class ToolPermissionsEndToEndTest {
 
     @TempDir
     Path tempDir;
@@ -43,10 +43,11 @@ class McpPermissionsEndToEndTest {
     private static final String RESPONSE_LIST_COMPILED_FILES_MAIN =
             "INTENT: waiting-for-next-message\nCONTENT_TYPE: tool-request\n\noperation: list_compiled_files\nbase: main\npath: feature.md\n";
 
-    private ReinsConfig configWithMcp(String main, String test) {
+    private ReinsConfig configWithTooling(String main, String test) {
         ReinsConfig config = new ReinsConfig();
-                config.getTooling().setMain(main);
-                config.getTooling().setTest(test);
+        config.setProvider("gemini");
+        config.getTooling().setMain(main);
+        config.getTooling().setTest(test);
         return config;
     }
 
@@ -96,7 +97,7 @@ class McpPermissionsEndToEndTest {
         request.setBaseMappings(baseMappings());
 
         
-        ReinsConfig config = configWithMcp("read", "read");
+        ReinsConfig config = configWithTooling("read", "read");
 
         ReasoningResult result = service.runCycle(request, config);
 
@@ -136,7 +137,7 @@ class McpPermissionsEndToEndTest {
         request.setBaseMappings(baseMappings());
 
         
-        ReinsConfig config = configWithMcp("list,read", "list,read");
+        ReinsConfig config = configWithTooling("list,read", "list,read");
 
         service.runCycle(request, config);
 
@@ -161,7 +162,7 @@ class McpPermissionsEndToEndTest {
         request.setProjectRoot(tempDir);
         request.setBaseMappings(baseMappings());
 
-        ReinsConfig config = configWithMcp("list,read", "read");
+        ReinsConfig config = configWithTooling("list,read", "read");
 
         service.runCycle(request, config);
 
@@ -172,7 +173,7 @@ class McpPermissionsEndToEndTest {
 
      
     @Test
-    void emptyMcpSettings_writeFileOnTargetNeverDenied() throws Exception {
+    void emptyFileToolsSettings_writeFileOnTargetNeverDenied() throws Exception {
         InferenceService inferenceService = mock(InferenceService.class);
 
         String writeResponse = "INTENT: waiting-for-next-message\nCONTENT_TYPE: tool-request\n\n"
@@ -203,7 +204,7 @@ class McpPermissionsEndToEndTest {
         request.setBaseMappings(baseMappings());
 
         
-        ReinsConfig config = configWithMcp(null, null);
+        ReinsConfig config = configWithTooling(null, null);
 
         service.runCycle(request, config);
 
@@ -211,7 +212,7 @@ class McpPermissionsEndToEndTest {
         boolean anyPermissionDenial = sentMessages.stream()
                 .anyMatch(m -> m.contains("not permitted") || m.contains("is not permitted on base"));
         assertFalse(anyPermissionDenial,
-                "write_file on target must NOT produce a permission denial even with empty mcp config");
+                "write_file on target must NOT produce a permission denial even with empty fileTools config");
     }
 
     @Test
@@ -221,16 +222,14 @@ class McpPermissionsEndToEndTest {
                 .thenReturn(response(
                         "INTENT: waiting-for-next-message\nCONTENT_TYPE: tool-request\n\n"
                                 + "operation: run_script\n"
-                                + "script: compile-one-java.sh\n"
+                                + "script: run-build.sh\n"
                                 + "args: [\"com/example/Broken.java\"]\n"))
                 .thenReturn(response(
                         "INTENT: waiting-for-next-message\nCONTENT_TYPE: tool-request\n\n"
                                 + "operation: patch_file\n"
                                 + "base: main\n"
                                 + "path: forbidden.md\n"
-                                + "atLine: 1\n"
-                                + "replacing: 0\n"
-                                + "content: \"# forbidden\\n\"\n"))
+                                + "content: \"@@ -1 +1 @@\\n-old\\n+# forbidden\\n\"\n"))
                 .thenReturn(response(RESPONSE_FINISH_SUCCESS));
 
         List<String> sentMessages = new java.util.ArrayList<>();
@@ -254,7 +253,7 @@ class McpPermissionsEndToEndTest {
         mappings.setScriptRoot(tempDir);
         request.setBaseMappings(mappings);
 
-        ReinsConfig config = configWithMcp("list,read", "read");
+        ReinsConfig config = configWithTooling("list,read", "read");
         config.getReasoning().setScriptsPath(".");
 
         service.runCycle(request, config);

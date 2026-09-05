@@ -12,6 +12,10 @@
 package br.com.dizeno.reins.compilation.pipeline;
 
 import br.com.dizeno.reins.reasoning.ReasoningRequest;
+import br.com.dizeno.reins.compilation.tracking.ReasoningNote;
+import br.com.dizeno.reins.compilation.tracking.SourceTrackingRecord;
+import java.util.ArrayList;
+import java.util.List;
 
  
 /**
@@ -29,6 +33,7 @@ public final class ReasoningRequestBuildPhase implements CompilationPhase {
     @Override
     public void execute(SourceCompilationContext ctx, PhaseChain next) throws Exception {
         ReasoningRequest reasoningRequest = ReasoningHelper.buildReasoningRequestFor(
+                ctx.getNode() != null ? ctx.getNode().absolutePath() : null,
                 ctx.getCanonicalSourcePath(),
                 ctx.getSourceCategory(),
                 ctx.getSourceHash(),
@@ -38,9 +43,38 @@ public final class ReasoningRequestBuildPhase implements CompilationPhase {
                 ctx.getLog(),
                 ctx.getWorkSetEntry().getStatus());
 
+        SourceTrackingRecord priorRecord = ctx.getPriorRecord();
+        if (ctx.getConfig() != null && ctx.getConfig().getNote() != null && !ctx.getConfig().getNote().isBlank()) {
+            String noteText = ctx.getConfig().getNote().trim();
+            if (priorRecord == null) {
+                priorRecord = new SourceTrackingRecord();
+            } else {
+                SourceTrackingRecord copy = new SourceTrackingRecord();
+                copy.setSourcePath(priorRecord.getSourcePath());
+                copy.setSourceCategory(priorRecord.getSourceCategory());
+                copy.setSourceHash(priorRecord.getSourceHash());
+                copy.setSourceModificationTime(priorRecord.getSourceModificationTime());
+                copy.setBlockFingerprints(priorRecord.getBlockFingerprints());
+                copy.setMarkdownReferences(priorRecord.getMarkdownReferences());
+                copy.setInferenceFingerprint(priorRecord.getInferenceFingerprint());
+                copy.setModel(priorRecord.getModel());
+                copy.setOutputPolicy(priorRecord.getOutputPolicy());
+                copy.setLastCompiledAt(priorRecord.getLastCompiledAt());
+                copy.setLastStatus(priorRecord.getLastStatus());
+                copy.setResolvedTargetRoot(priorRecord.getResolvedTargetRoot());
+                copy.setCompiledFiles(priorRecord.getCompiledFiles());
+                copy.setInspectedFiles(priorRecord.getInspectedFiles());
+                copy.setNotes(priorRecord.getNotes());
+                priorRecord = copy;
+            }
+            List<ReasoningNote> updatedNotes = new ArrayList<>(priorRecord.getNotes());
+            updatedNotes.add(new ReasoningNote(noteText, java.time.Instant.now().toString(), ReasoningNote.Origin.CLI));
+            priorRecord.setNotes(updatedNotes);
+        }
+
         reasoningRequest.setReferenceDepthPolicy(ctx.getReferenceDepthPolicy());
         reasoningRequest.setEagerlyProvide(ctx.getEagerlyProvide());
-        reasoningRequest.setPriorRecord(ctx.getPriorRecord());
+        reasoningRequest.setPriorRecord(priorRecord);
 
         ctx.setReasoningRequest(reasoningRequest);
 

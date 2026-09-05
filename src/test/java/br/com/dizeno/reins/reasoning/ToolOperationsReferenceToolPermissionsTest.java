@@ -60,8 +60,8 @@ class ToolOperationsReferenceToolPermissionsTest {
 
         assertTrue(ref.contains("- add_reasoning_note: always available"),
                  "add_reasoning_note must always appear");
-        assertTrue(ref.contains("- clear_inference_notes: always available"),
-                 "clear_inference_notes must always appear");
+        assertTrue(ref.contains("- clear_reasoning_notes: always available"),
+                 "clear_reasoning_notes must always appear");
         assertFalse(ref.contains("- **fallback when add_reasoning_note is unavailable**"));
     }
 
@@ -80,8 +80,8 @@ class ToolOperationsReferenceToolPermissionsTest {
 
         assertTrue(ref.contains("- add_reasoning_note: always available"),
                  "add_reasoning_note must appear even with empty policy");
-        assertTrue(ref.contains("- clear_inference_notes: always available"),
-                 "clear_inference_notes must appear even with empty policy");
+        assertTrue(ref.contains("- clear_reasoning_notes: always available"),
+                 "clear_reasoning_notes must appear even with empty policy");
         assertFalse(ref.contains("- **fallback when add_reasoning_note is unavailable**"));
     }
 
@@ -92,12 +92,12 @@ class ToolOperationsReferenceToolPermissionsTest {
 
         assertFalse(ref.contains("add_reasoning_note: always available"),
                  "add_reasoning_note must not appear in permissions when disabled");
-        assertFalse(ref.contains("clear_inference_notes: always available"),
-                 "clear_inference_notes must not appear in permissions when disabled");
+        assertFalse(ref.contains("clear_reasoning_notes: always available"),
+                 "clear_reasoning_notes must not appear in permissions when disabled");
         assertFalse(ref.contains("- **add_reasoning_note**:"),
                  "add_reasoning_note details must not appear when disabled");
-        assertFalse(ref.contains("- **clear_inference_notes**:"),
-                 "clear_inference_notes details must not appear when disabled");
+        assertFalse(ref.contains("- **clear_reasoning_notes**:"),
+                 "clear_reasoning_notes details must not appear when disabled");
         assertTrue(ref.contains("- **fallback when add_reasoning_note is unavailable**:"),
                  "fallback instructions must appear when disabled");
     }
@@ -109,12 +109,12 @@ class ToolOperationsReferenceToolPermissionsTest {
 
         assertTrue(ref.contains("- add_reasoning_note: always available"),
                  "add_reasoning_note must appear in permissions when enabled");
-        assertTrue(ref.contains("- clear_inference_notes: always available"),
-                 "clear_inference_notes must appear in permissions when enabled");
+        assertTrue(ref.contains("- clear_reasoning_notes: always available"),
+                 "clear_reasoning_notes must appear in permissions when enabled");
         assertTrue(ref.contains("- **add_reasoning_note**:"),
                  "add_reasoning_note details must appear when enabled");
-        assertTrue(ref.contains("- **clear_inference_notes**:"),
-                 "clear_inference_notes details must appear when enabled");
+        assertTrue(ref.contains("- **clear_reasoning_notes**:"),
+                 "clear_reasoning_notes details must appear when enabled");
         assertFalse(ref.contains("- **fallback when add_reasoning_note is unavailable**:"),
                  "fallback instructions must not appear when enabled");
     }

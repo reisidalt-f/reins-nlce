@@ -29,9 +29,14 @@ public class LlmProviderResolver {
      * @return the string result
      */
     public synchronized String resolve(ReinsConfig config) throws LlmServiceException {
-        String configured = (config == null || config.getProvider() == null || config.getProvider().isBlank())
-                ? "gemini"
-                : config.getProvider().trim().toLowerCase();
+        if (config == null || config.getProvider() == null || config.getProvider().isBlank()) {
+            LlmError error = new LlmError();
+            error.setCategory(LlmError.Category.COMPATIBILITY);
+            error.setRetryable(false);
+            error.setMessage("Provider is not configured");
+            throw new LlmServiceException(error);
+        }
+        String configured = config.getProvider().trim().toLowerCase();
         if (resolvedProvider == null) {
             resolvedProvider = configured;
             return resolvedProvider;

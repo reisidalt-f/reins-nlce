@@ -14,7 +14,7 @@ package br.com.dizeno.reins.compilation;
 import br.com.dizeno.reins.compilation.tracking.SourceTrackingRecord;
 import br.com.dizeno.reins.run.config.*;
 import br.com.dizeno.reins.run.config.settings.*;
-import br.com.dizeno.reins.reasoning.inference.llm.providers.gemini.GeminiEmptyResponseException;
+import br.com.dizeno.reins.reasoning.inference.llm.error.LlmEmptyResponseException;
 import br.com.dizeno.reins.reasoning.inference.InferenceService;
 import br.com.dizeno.reins.reasoning.inference.MarkdownInferenceResponse;
 import br.com.dizeno.reins.reasoning.ReasoningRequest;
@@ -56,14 +56,12 @@ class CompilationServiceTest {
         config.setDryRun(false);
         config.setFailOnError(failOnError);
         config.setIncludePattern("**/*.md");
-        config.setScanRoots(List.of(
-                projectDir.resolve("src/main/nl").toFile(),
-                projectDir.resolve("src/test/nl").toFile()));
+        config.setSourceBase("main", projectDir.resolve("src/main/nl").toFile());
+        config.setSourceBase("test", projectDir.resolve("src/test/nl").toFile());
 
         TargetSettings target = new TargetSettings();
-        target.setRoot(projectDir.toFile());
-        target.setMain("src/main/java");
-        target.setTest("src/test/java");
+        target.setTargetBase("main", "src/main/java");
+        target.setTargetBase("test", "src/test/java");
         config.setTarget(target);
         return config;
     }
@@ -245,7 +243,7 @@ class CompilationServiceTest {
         InferenceService inferenceService = mock(InferenceService.class);
         ReasoningService reasoningService = mock(ReasoningService.class);
         when(reasoningService.runCycle(any(ReasoningRequest.class), any(ReinsConfig.class)))
-                .thenThrow(new GeminiEmptyResponseException("Gemini API returned empty candidates", 2, 2));
+                .thenThrow(new LlmEmptyResponseException("LLM returned empty candidates", 2, 2));
 
         CompilationService service = new CompilationService(
                 inferenceService,
@@ -264,8 +262,8 @@ class CompilationServiceTest {
         Files.writeString(source, "# Empty response test\n");
         RecordingLog log = new RecordingLog();
 
-        assertThrows(GeminiEmptyResponseException.class,
-                () -> service.processFiles(List.of(source.toFile()), false, cfg, projectDir, log));
+        assertThrows(LlmEmptyResponseException.class,
+                () -> service.processFiles(List.of(source.toFile()), cfg, projectDir, log));
         assertTrue(
                 log.infoMessages.stream().anyMatch(msg -> msg.contains("retrySummary=attempts=2,noUsableContent=2")));
     }

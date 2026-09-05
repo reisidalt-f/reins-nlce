@@ -12,6 +12,7 @@
 package br.com.dizeno.reins.compilation.context;
 
 import br.com.dizeno.reins.source.graph.MarkdownReferenceExtractor;
+import br.com.dizeno.reins.run.config.settings.ContextSourceSpec;
 import br.com.dizeno.reins.security.PathValidator;
 import org.apache.maven.plugin.MojoExecutionException;
 
@@ -198,7 +199,7 @@ public class ProjectContextService {
         Set<Path> visited = alreadyVisited == null
                 ? new LinkedHashSet<>()
                 : new LinkedHashSet<>(alreadyVisited);
-        discoverFile(contextPath, rootContent, projectRoot, validator, scanRoots, files, visited, new ArrayDeque<>(), policy, 0, includeReferences);
+        discoverFile(contextPath, rootContent, "**/*.md", List.of("*"), projectRoot, validator, scanRoots, files, visited, new ArrayDeque<>(), policy, 0, includeReferences);
 
         return new CompilationBackgroundPayload(files);
     }
@@ -212,7 +213,7 @@ public class ProjectContextService {
      * @param alreadyVisited the already visited
      * @return the resulting result
      */
-    public SourcesLoadResult loadSources(List<File> sources,
+    public SourcesLoadResult loadSources(List<ContextSourceSpec> sources,
                                           Path projectRoot,
                                           Set<Path> scanRoots,
                                           Set<Path> alreadyVisited) throws MojoExecutionException {
@@ -229,7 +230,7 @@ public class ProjectContextService {
      * @param referenceDepthPolicy the reference depth policy
      * @return the resulting result
      */
-    public SourcesLoadResult loadSources(List<File> sources,
+    public SourcesLoadResult loadSources(List<ContextSourceSpec> sources,
                                          Path projectRoot,
                                          Set<Path> scanRoots,
                                          Set<Path> alreadyVisited,
@@ -248,7 +249,7 @@ public class ProjectContextService {
      * @param includeReferences the include references
      * @return the resulting result
      */
-    public SourcesLoadResult loadSources(List<File> sources,
+    public SourcesLoadResult loadSources(List<ContextSourceSpec> sources,
                                          Path projectRoot,
                                          Set<Path> scanRoots,
                                          Set<Path> alreadyVisited,
@@ -268,7 +269,11 @@ public class ProjectContextService {
         List<String> blankExprs = new ArrayList<>();
         Set<Path> visited = new LinkedHashSet<>(alreadyVisited);
 
-        for (File sourceFile : sources) {
+        for (ContextSourceSpec spec : sources) {
+            if (spec == null || spec.getFile() == null) {
+                continue;
+            }
+            File sourceFile = spec.getFile();
             String configuredExpr = sourceFile.toString();
             Path absolutePath = sourceFile.toPath().toAbsolutePath().normalize();
 
@@ -315,7 +320,7 @@ public class ProjectContextService {
                 }
             }
 
-            discoverFile(absolutePath, content, projectRoot, validator, scanRoots, combinedFiles, visited, new ArrayDeque<>(), policy, 0, includeReferences);
+            discoverFile(absolutePath, content, spec.getPattern(), spec.getPhases(), projectRoot, validator, scanRoots, combinedFiles, visited, new ArrayDeque<>(), policy, 0, includeReferences);
             loadedExprs.add(configuredExpr);
         }
 
@@ -324,6 +329,8 @@ public class ProjectContextService {
 
     private void discoverFile(Path absolutePath,
                                String content,
+                               String filePattern,
+                               List<String> phasePatterns,
                                Path projectRoot,
                                PathValidator validator,
                                Set<Path> scanRoots,
@@ -353,7 +360,7 @@ public class ProjectContextService {
         activeStack.addLast(absolutePath);
         try {
             String displayPath = projectRoot.relativize(absolutePath).toString().replace('\\', '/');
-            result.add(new CompilationBackgroundFile(absolutePath, displayPath, content));
+            result.add(new CompilationBackgroundFile(absolutePath, displayPath, content, filePattern, phasePatterns));
 
             if (!includeReferences && depthFromRoot == 0) {
                 return;
@@ -402,7 +409,7 @@ public class ProjectContextService {
                             "Failed to read compilation background referenced file: " + refAbsolute + ": " + e.getMessage(), e);
                 }
 
-                discoverFile(refAbsolute, refContent, projectRoot, validator, scanRoots, result, visited, activeStack, referenceDepthPolicy, childDepth, includeReferences);
+                discoverFile(refAbsolute, refContent, filePattern, phasePatterns, projectRoot, validator, scanRoots, result, visited, activeStack, referenceDepthPolicy, childDepth, includeReferences);
             }
         } finally {
             activeStack.removeLast();

@@ -44,9 +44,6 @@ public class ReasoningNote {
         public static Origin fromString(String value) {
             if (value == null) return null;
             String upper = value.toUpperCase(java.util.Locale.ROOT);
-            if ("MCP".equals(upper)) {
-                return TOOL;
-            }
             try {
                 return Origin.valueOf(upper);
             } catch (IllegalArgumentException e) {

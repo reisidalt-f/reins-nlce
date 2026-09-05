@@ -33,6 +33,24 @@ public final class TrackingLoadPhase implements CompilationPhase {
                 ctx.getCanonicalSourcePath(),
                 ctx.getLog());
 
+        if (ctx.getConfig() != null && ctx.getConfig().isFreshCompilation() && priorRecord != null) {
+            TrackingRecordHelper.deletePreviouslyGeneratedFiles(
+                    ctx.getProjectRoot(),
+                    priorRecord,
+                    ctx.getLog());
+            if (priorRecord.getCompiledFiles() != null) {
+                priorRecord.getCompiledFiles().clear();
+            }
+            if (!ctx.getConfig().getTracking().isFreezeState() && !ctx.getConfig().isDryRun()) {
+                try {
+                    ctx.getSourceTrackingManager().commit(ctx.getProjectRoot(), ctx.getCanonicalSourcePath(), priorRecord, ctx.getTrackingStore());
+                } catch (Exception ex) {
+                    ctx.getLog().warn("Could not update tracking record after freshCompilation cleanup for "
+                            + ctx.getCanonicalSourcePath() + ": " + ex.getMessage());
+                }
+            }
+        }
+
         ctx.setPriorRecord(priorRecord);
 
         next.execute(ctx);

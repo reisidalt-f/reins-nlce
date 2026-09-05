@@ -21,6 +21,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
+import br.com.dizeno.reins.reasoning.inference.llm.logging.ModelRequestResponseLogger;
+
  
 /**
  * FileReasoningLogService is part of the orchestration of conversational reasoning loops, prompt construction, and tool instruction mapping in the reins architecture.
@@ -42,6 +44,19 @@ public class FileReasoningLogService implements ReasoningLogService {
      */
     @Override
     public ReasoningCycleLog initializeCycleLog(String cycleId, Path projectRoot) throws Exception {
+        return initializeCycleLog(cycleId, projectRoot, null);
+    }
+
+    /**
+     * Initializes the component cycle log with source path.
+     *
+     * @param cycleId the cycle id
+     * @param projectRoot the root path of the project
+     * @param sourcePath the current compilation source path
+     * @return the resolved or constructed object
+     */
+    @Override
+    public ReasoningCycleLog initializeCycleLog(String cycleId, Path projectRoot, String sourcePath) throws Exception {
         Path logDirectory = projectRoot.resolve(REASONING_LOGS_DIR);
         
         
@@ -55,7 +70,7 @@ public class FileReasoningLogService implements ReasoningLogService {
         cycleLog.setCreatedAt(Instant.now());
 
         
-        String filenameTimestamp = allocateLogFilename(logDirectory);
+        String filenameTimestamp = allocateLogFilename(logDirectory, sourcePath);
         cycleLog.setFileNameTimestamp(filenameTimestamp);
 
         Path logFilePath = logDirectory.resolve(filenameTimestamp + LOG_EXTENSION);
@@ -123,9 +138,11 @@ public class FileReasoningLogService implements ReasoningLogService {
     }
 
      
-    private String allocateLogFilename(Path logDirectory) throws InterruptedException {
+    private String allocateLogFilename(Path logDirectory, String sourcePath) throws InterruptedException {
         LocalDateTime now = LocalDateTime.now(ZoneId.systemDefault());
-        String filename = FILENAME_FORMATTER.format(now);
+        String timestamp = FILENAME_FORMATTER.format(now);
+        String fileNameBeingProcessed = ModelRequestResponseLogger.extractFileNameBeingProcessed(sourcePath);
+        String filename = timestamp + "-" + fileNameBeingProcessed;
         Path fullPath = logDirectory.resolve(filename + LOG_EXTENSION);
 
         
@@ -135,7 +152,7 @@ public class FileReasoningLogService implements ReasoningLogService {
 
         
         Thread.sleep(1000);
-        return allocateLogFilename(logDirectory);
+        return allocateLogFilename(logDirectory, sourcePath);
     }
 
      

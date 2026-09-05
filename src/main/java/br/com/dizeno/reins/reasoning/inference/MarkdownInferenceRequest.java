@@ -31,7 +31,7 @@ public class MarkdownInferenceRequest {
     private String markdownContent;
     private List<ConversationMessage> conversationHistory;
     private String promptTemplateVersion;
-    private GeminiSettings modelConfigSnapshot;
+    private ModelProviderSetting modelConfigSnapshot;
     private String cachedContentId;
     private boolean useCachedContent;
 
@@ -184,7 +184,7 @@ public class MarkdownInferenceRequest {
      *
      * @return the collection of elements
      */
-    public GeminiSettings getModelConfigSnapshot() {
+    public ModelProviderSetting getModelConfigSnapshot() {
         return modelConfigSnapshot;
     }
 
@@ -193,7 +193,7 @@ public class MarkdownInferenceRequest {
      *
      * @param modelConfigSnapshot the model config snapshot
      */
-    public void setModelConfigSnapshot(GeminiSettings modelConfigSnapshot) {
+    public void setModelConfigSnapshot(ModelProviderSetting modelConfigSnapshot) {
         this.modelConfigSnapshot = modelConfigSnapshot;
     }
 

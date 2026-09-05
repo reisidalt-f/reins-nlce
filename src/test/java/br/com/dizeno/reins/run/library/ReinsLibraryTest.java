@@ -13,11 +13,12 @@ package br.com.dizeno.reins.run.library;
 
 import br.com.dizeno.reins.compilation.CompilationSummary;
 import br.com.dizeno.reins.compilation.tracking.CleanupOutcomeSummary;
-import br.com.dizeno.reins.run.ReinsSystemOutLogger;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
@@ -30,11 +31,18 @@ public class ReinsLibraryTest {
     @TempDir
     Path tempDir;
 
+    @BeforeEach
+    void setUp() throws Exception {
+        Files.createDirectories(tempDir.resolve("src/main/nl"));
+    }
+
     @Test
     public void testProgrammaticCompileWithMap() throws Exception {
         Map<String, Object> map = new HashMap<>();
         map.put("provider", "stub");
         map.put("verbose", "true");
+        map.put("source.main", "src/main/nl");
+        map.put("target.main", "src/main/java");
 
         File baseDir = tempDir.toFile();
         CompilationSummary summary = ReinsLibrary.compile(baseDir, map);
@@ -47,6 +55,8 @@ public class ReinsLibraryTest {
         Properties props = new Properties();
         props.setProperty("provider", "stub");
         props.setProperty("verbose", "false");
+        props.setProperty("source.main", "src/main/nl");
+        props.setProperty("target.main", "src/main/java");
 
         File baseDir = tempDir.toFile();
         CompilationSummary summary = ReinsLibrary.compile(baseDir, props);
@@ -58,6 +68,8 @@ public class ReinsLibraryTest {
     public void testProgrammaticCleanWithMap() throws Exception {
         Map<String, Object> map = new HashMap<>();
         map.put("provider", "stub");
+        map.put("source.main", "src/main/nl");
+        map.put("target.main", "src/main/java");
 
         File baseDir = tempDir.toFile();
         CleanupOutcomeSummary summary = ReinsLibrary.clean(baseDir, map);
@@ -69,6 +81,8 @@ public class ReinsLibraryTest {
     public void testProgrammaticCleanWithProperties() throws Exception {
         Properties props = new Properties();
         props.setProperty("provider", "stub");
+        props.setProperty("source.main", "src/main/nl");
+        props.setProperty("target.main", "src/main/java");
 
         File baseDir = tempDir.toFile();
         CleanupOutcomeSummary summary = ReinsLibrary.clean(baseDir, props);

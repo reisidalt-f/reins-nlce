@@ -29,12 +29,14 @@ public class ScriptRunnerConfig {
     private final Path scriptRoot;
     private final boolean enabled;
     private final int outputTruncationLimit;
+    private final boolean addReasoningNotes;
 
-    private ScriptRunnerConfig(Path projectRoot, Path scriptRoot, boolean enabled, int outputTruncationLimit) {
+    private ScriptRunnerConfig(Path projectRoot, Path scriptRoot, boolean enabled, int outputTruncationLimit, boolean addReasoningNotes) {
         this.projectRoot = projectRoot;
         this.scriptRoot = scriptRoot;
         this.enabled = enabled;
         this.outputTruncationLimit = outputTruncationLimit;
+        this.addReasoningNotes = addReasoningNotes;
     }
 
     /**
@@ -43,7 +45,7 @@ public class ScriptRunnerConfig {
      * @return the resulting config
      */
     public static ScriptRunnerConfig disabled() {
-        return new ScriptRunnerConfig(null, null, false, DEFAULT_OUTPUT_TRUNCATION_LIMIT);
+        return new ScriptRunnerConfig(null, null, false, DEFAULT_OUTPUT_TRUNCATION_LIMIT, false);
     }
 
     /**
@@ -57,6 +59,7 @@ public class ScriptRunnerConfig {
         if (config == null) {
             return disabled();
         }
+        boolean addNotes = config.getTooling() != null && config.getTooling().isAddReasoningNotes();
         String path = null;
         if (config.getTooling() != null && config.getTooling().getScriptPath() != null && !config.getTooling().getScriptPath().isBlank()) {
             path = config.getTooling().getScriptPath().trim();
@@ -65,14 +68,14 @@ public class ScriptRunnerConfig {
         }
 
         if (path == null) {
-            return disabled();
+            return new ScriptRunnerConfig(null, null, false, DEFAULT_OUTPUT_TRUNCATION_LIMIT, addNotes);
         }
         Path normalizedProjectRoot = projectRoot.toAbsolutePath().normalize();
         Path configured = Path.of(path);
         Path resolved = configured.isAbsolute()
                 ? configured.normalize()
                 : normalizedProjectRoot.resolve(configured).normalize();
-        return new ScriptRunnerConfig(normalizedProjectRoot, resolved, true, DEFAULT_OUTPUT_TRUNCATION_LIMIT);
+        return new ScriptRunnerConfig(normalizedProjectRoot, resolved, true, DEFAULT_OUTPUT_TRUNCATION_LIMIT, addNotes);
     }
 
     /**
@@ -187,5 +190,14 @@ public class ScriptRunnerConfig {
      */
     public int getOutputTruncationLimit() {
         return outputTruncationLimit;
+    }
+
+    /**
+     * Checks if reasoning notes operations are enabled.
+     *
+     * @return true if reasoning notes operations are enabled, false otherwise
+     */
+    public boolean isAddReasoningNotes() {
+        return addReasoningNotes;
     }
 }

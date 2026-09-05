@@ -79,15 +79,7 @@ class DefaultScriptBehaviorIT {
                                 List.of(),
                                 List.of(),
                                 List.of()))
-                        .config(new ReasoningScriptViews.ConfigView(
-                                "gemini-2.5-pro",
-                                5,
-                                true,
-                                false,
-                                false,
-                                true,
-                                false,
-                                null))
+                        .config(new ReasoningScriptViews.ConfigView(new br.com.dizeno.reins.run.config.ReinsConfig()))
                         .cycle(new ReasoningScriptViews.CycleView("cycle-1", 1, 5, "IN_PROGRESS", null))
                         .policy(new ReasoningScriptViews.PolicyView(
                                 List.of("main", "test", "target"),
@@ -107,15 +99,15 @@ class DefaultScriptBehaviorIT {
                         .referenceTree("root.md")
                         .build();
 
-                String scriptOutput = evaluator.evaluate("context-build.ftl", context, java.util.Map.of("step", "source-notes"));
+                String scriptOutput = evaluator.evaluatePhase("reasoning-pipeline.ftl", "default-cycle", context, java.util.Map.of());
                 String normalized = normalize(scriptOutput);
 
-                org.junit.jupiter.api.Assertions.assertTrue(normalized.contains("Corrective notes for this source:"));
+                org.junit.jupiter.api.Assertions.assertTrue(normalized.contains("Important notes for this source:"));
                 org.junit.jupiter.api.Assertions.assertTrue(normalized.contains("Review compiled output paths before continuing."));
             }
 
     @Test
-    void mcpResultScriptMatchesLegacyFormatterOutput() throws Exception {
+    void toolResultScriptMatchesLegacyFormatterOutput() throws Exception {
         ScriptEvaluator evaluator = new ScriptEvaluator(ScriptRegistry.build(new ScriptResolver()), null);
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.success(
@@ -219,7 +211,7 @@ class DefaultScriptBehaviorIT {
                 String scriptOutput = evaluator.evaluatePhase("reasoning-pipeline.ftl", "default-cycle", context, java.util.Map.of());
                 String normalized = normalize(scriptOutput);
 
-                assertTrue(normalized.contains("Compile the main source file:\nmain:com/example/design.md"));
+                assertTrue(normalized.contains("Compile this source file:\nmain:com/example/design.md"));
                 assertTrue(normalized.contains("main:com/example/design.md"));
                 org.junit.jupiter.api.Assertions.assertFalse(normalized.contains("main:main:"));
         }
@@ -259,14 +251,7 @@ class DefaultScriptBehaviorIT {
                 List.of());
 
         ReasoningScriptViews.ConfigView config = new ReasoningScriptViews.ConfigView(
-                "gemini-2.5-pro",
-                5,
-                true,
-                false,
-                false,
-                true,
-                false,
-                null);
+                new br.com.dizeno.reins.run.config.ReinsConfig());
 
         ReasoningScriptViews.CycleView cycle = new ReasoningScriptViews.CycleView(
                 "cycle-1",

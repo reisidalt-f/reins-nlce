@@ -54,20 +54,24 @@
             <freezeState>false</freezeState>
           </tracking>
           <context>
-            <attachReferencedFiles>true</attachReferencedFiles>
-            <referencesTreeDepth>*</referencesTreeDepth>
-            <includeProjectFiles>false</includeProjectFiles>
+            <referencesTree>
+              <attachFiles>true</attachFiles>
+              <depth>*</depth>
+            </referencesTree>
             <sources>
-              <source>compilation/java-console.md</source>
+              <source>
+                <file>compilation/java-console.md</file>
+              </source>
             </sources>
             <cachedContent>false</cachedContent>
+            <compiledFiles>true</compiledFiles>
+            <inspectedFiles>false</inspectedFiles>
           </context>
-          <eagerlyProvide>
-            <previouslyCompiledFiles>true</previouslyCompiledFiles>
-            <previouslyInspectedFiles>false</previouslyInspectedFiles>
-          </eagerlyProvide>
+          <sources>
+            <main>src/main/nl</main>
+          </sources>
           <target>
-            <main>${project.basedir}/target/generated-sources/reins</main>
+            <main>target/generated-sources/reins</main>
           </target>
           <reasoning>
             <maxTurns>10</maxTurns>
@@ -75,13 +79,9 @@
             <logSystemContext>false</logSystemContext>
             <enableReasoningLog>true</enableReasoningLog>
           </reasoning>
-          <scanRoots>
-            <scanRoot>${project.basedir}/src/main/nl</scanRoot>
-          </scanRoots>
           <includePattern>**/*.md</includePattern>
           <failOnError>true</failOnError>
           <verbose>true</verbose>
-          <enableProjectInference>false</enableProjectInference>
           <tooling>
             <main>list_compiled</main>
             <target>list, read, write, delete</target>

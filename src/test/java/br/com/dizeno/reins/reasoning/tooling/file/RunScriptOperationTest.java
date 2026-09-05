@@ -51,18 +51,18 @@ class RunScriptOperationTest {
     @Test
     void runScriptAcceptsRedundantScriptPrefixInPath() throws Exception {
         Path scriptDir = Files.createDirectories(tempDir.resolve("scripts"));
-        writeExecutableScript(scriptDir.resolve("compile-one-java.sh"), "#!/usr/bin/env bash\necho compiled\nexit 0\n");
+        writeExecutableScript(scriptDir.resolve("run-build.sh"), "#!/usr/bin/env bash\necho compiled\nexit 0\n");
 
         br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult result = new br.com.dizeno.reins.reasoning.tooling.ToolingService().execute(
-                request("script:compile-one-java.sh"),
+                request("script:run-build.sh"),
                 resolver(scriptDir),
                 null,
                 scriptConfig("scripts")
         );
 
         assertEquals(br.com.dizeno.reins.reasoning.tooling.ToolExecutionResult.Status.SUCCESS, result.getStatus());
-        assertEquals("script:compile-one-java.sh", result.getQualifiedPath());
-        assertEquals("scripts/compile-one-java.sh", result.getResolvedPath());
+        assertEquals("script:run-build.sh", result.getQualifiedPath());
+        assertEquals("scripts/run-build.sh", result.getResolvedPath());
         assertTrue(result.getStdout().contains("compiled"));
     }
 
@@ -87,70 +87,46 @@ class RunScriptOperationTest {
 
     @Test
     void runScriptRequestParsingAllowsScriptBasePathsForRuntimeValidation() {
-        assertDoesNotThrow(() -> br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: run_script\nscript: ../outside.bash\n"
+        assertDoesNotThrow(() -> br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromText(
+                "--reins-boundary\nRUN_SCRIPT ../outside.bash\n--reins-boundary--\n"
         ));
     }
 
     @Test
     void runScriptRequestParsingAcceptsSeparateArgsList() {
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest parsed = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: run_script\n"
-                + "script: compile-one-java.sh\n"
-                        + "args:\n"
-                        + "  - com/dizeno/mdwriter/editor/layout/graphics/ImageGlyph.java\n"
-                        + "  - --verbose\n"
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest parsed = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromText(
+                "--reins-boundary\nRUN_SCRIPT run-build.sh path/to/file.ext --verbose\n--reins-boundary--\n"
         );
 
-        assertEquals("compile-one-java.sh", parsed.getScript());
+        assertEquals("run-build.sh", parsed.getScript());
         assertEquals(2, parsed.getArgs().size());
-        assertEquals("com/dizeno/mdwriter/editor/layout/graphics/ImageGlyph.java", parsed.getArgs().get(0));
+        assertEquals("path/to/file.ext", parsed.getArgs().get(0));
         assertEquals("--verbose", parsed.getArgs().get(1));
     }
 
-        @Test
-        void runScriptRequestParsingAcceptsTypedArgsAndNormalizesToString() {
-        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest parsed = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-            "operation: run_script\n"
-                + "script: compile-one-java.sh\n"
-                + "args:\n"
-                + "  - true\n"
-                + "  - 3\n"
-                + "  - hello\n"
+    @Test
+    void runScriptRequestParsingAcceptsTypedArgsAndNormalizesToString() {
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest parsed = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromText(
+                "--reins-boundary\nRUN_SCRIPT run-build.sh true 3 hello\n--reins-boundary--\n"
         );
 
         assertEquals(3, parsed.getArgs().size());
         assertEquals("true", parsed.getArgs().get(0));
         assertEquals("3", parsed.getArgs().get(1));
         assertEquals("hello", parsed.getArgs().get(2));
-        }
+    }
 
-        @Test
-        void runScriptRequestParsingRejectsNonArrayArgsShape() {
-        IllegalArgumentException ex = org.junit.jupiter.api.Assertions.assertThrows(
-            IllegalArgumentException.class,
-            () -> br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: run_script\n"
-                    + "script: compile-one-java.sh\n"
-                    + "args: --verbose\n"
-            ));
+    @Test
+    void runScriptRequestParsingSeparatesArgsFromIntentFlag() {
+        br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest parsed = br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromText(
+                "--reins-boundary\nRUN_SCRIPT run-build.sh path/to/file.ext --intent build target component\n--reins-boundary--\n"
+        );
 
-        assertTrue(ex.getMessage().contains("args must be an array"));
-        }
-
-        @Test
-        void runScriptRequestParsingRejectsUnsupportedArgElementType() {
-        IllegalArgumentException ex = org.junit.jupiter.api.Assertions.assertThrows(
-            IllegalArgumentException.class,
-            () -> br.com.dizeno.reins.reasoning.tooling.ToolExecutionRequest.fromYaml(
-                "operation: run_script\n"
-                    + "script: compile-one-java.sh\n"
-                    + "args:\n"
-                    + "  - key: value\n"
-            ));
-
-        assertTrue(ex.getMessage().contains("string, number, or boolean"));
-        }
+        assertEquals("run-build.sh", parsed.getScript());
+        assertEquals(1, parsed.getArgs().size());
+        assertEquals("path/to/file.ext", parsed.getArgs().get(0));
+        assertEquals("build target component", parsed.getIntent());
+    }
 
     @Test
     void runScriptExecutesWithSeparateArgsParameter() throws Exception {

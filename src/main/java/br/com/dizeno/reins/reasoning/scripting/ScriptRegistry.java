@@ -220,7 +220,7 @@ public class ScriptRegistry {
         if (PhaseType.SCRIPT_FILE_LIST.equals(scriptName)) {
             return PhaseType.FILE_LIST;
         }
-        if (PhaseType.SCRIPT_TOOL_RESULT.equals(scriptName) || "mcp-result.ftl".equals(scriptName)) {
+        if (PhaseType.SCRIPT_TOOL_RESULT.equals(scriptName)) {
             return PhaseType.TOOL_RESPONSE;
         }
         return PhaseType.PROMPT_ASSEMBLY;
@@ -236,14 +236,8 @@ public class ScriptRegistry {
         return Collections.unmodifiableMap(new LinkedHashMap<>(scripts));
     }
 
-    /**
-     * Required Scripts For Cycle.
-     *
-     * @param projectInferenceCycle the project inference cycle
-     * @return the string result
-     */
     public static Map<String, PhaseType> requiredScriptsForCycle(boolean projectInferenceCycle) {
-        return projectInferenceCycle ? REQUIRED_SOURCE_BASE_SCRIPTS : REQUIRED_PER_SOURCE_SCRIPTS;
+        return REQUIRED_PER_SOURCE_SCRIPTS;
     }
 
     /**

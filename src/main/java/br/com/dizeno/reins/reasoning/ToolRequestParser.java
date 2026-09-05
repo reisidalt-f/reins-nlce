@@ -18,7 +18,6 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
- 
 /**
  * ToolRequestParser is part of the orchestration of conversational reasoning loops, prompt construction, and tool instruction mapping in the reins architecture.
  * Acts as a component managing tool request parser.
@@ -26,15 +25,13 @@ import java.util.regex.Pattern;
 public class ToolRequestParser {
 
     private static final Pattern FENCED_BLOCK =
-            Pattern.compile("(?m)^(?:```|\"\"\")(?:tool_request|mcp_request|yaml)?\\s*\\n(.*?)^(?:```|\"\"\")\\s*$", Pattern.DOTALL);
-    private static final Pattern OPERATION_START =
-            Pattern.compile("(?m)^operation:\\s*");
+            Pattern.compile("(?m)^(?:```|\"\"\")(?:tool_request|text|reins-boundary)?\\s*\\n(.*?)^(?:```|\"\"\")\\s*$", Pattern.DOTALL);
 
     /**
-     * Parse.
+     * Parse body text into tool execution requests.
      *
-     * @param body the body
-     * @return the collection of elements
+     * @param body the raw model response body
+     * @return list of parsed tool execution requests
      */
     public List<ToolExecutionRequest> parse(String body) {
         if (body == null || body.isBlank()) {
@@ -46,25 +43,7 @@ public class ToolRequestParser {
             return requests;
         }
 
-        requests = fromConsecutiveOperationBlocks(body);
-        if (!requests.isEmpty()) {
-            return requests;
-        }
-
-        
-        List<ToolExecutionRequest> separated = new ArrayList<>();
-        String[] chunks = body.split("\\n---\\n");
-        for (String chunk : chunks) {
-            String candidate = chunk.trim();
-            if (!candidate.isBlank() && candidate.contains("operation:")) {
-                separated.addAll(ToolExecutionRequest.fromYamlAny(candidate));
-            }
-        }
-        if (!separated.isEmpty()) {
-            return separated;
-        }
-
-        return new ArrayList<>(ToolExecutionRequest.fromYamlAny(body));
+        return ToolExecutionRequest.fromTextAny(body);
     }
 
     private List<ToolExecutionRequest> fromFencedBlocks(String body) {
@@ -73,30 +52,7 @@ public class ToolRequestParser {
         while (matcher.find()) {
             String block = matcher.group(1).trim();
             if (!block.isBlank()) {
-                requests.addAll(ToolExecutionRequest.fromYamlAny(block));
-            }
-        }
-        return requests;
-    }
-
-     
-    private List<ToolExecutionRequest> fromConsecutiveOperationBlocks(String body) {
-        Matcher matcher = OPERATION_START.matcher(body);
-        List<Integer> starts = new ArrayList<>();
-        while (matcher.find()) {
-            starts.add(matcher.start());
-        }
-        if (starts.size() <= 1) {
-            return List.of();
-        }
-
-        List<ToolExecutionRequest> requests = new ArrayList<>();
-        for (int i = 0; i < starts.size(); i++) {
-            int start = starts.get(i);
-            int end = (i + 1 < starts.size()) ? starts.get(i + 1) : body.length();
-            String chunk = body.substring(start, end).trim();
-            if (!chunk.isBlank()) {
-                requests.addAll(ToolExecutionRequest.fromYamlAny(chunk));
+                requests.addAll(ToolExecutionRequest.fromTextAny(block));
             }
         }
         return requests;

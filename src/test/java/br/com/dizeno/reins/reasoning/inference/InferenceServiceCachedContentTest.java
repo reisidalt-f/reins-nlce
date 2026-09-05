@@ -13,8 +13,10 @@ package br.com.dizeno.reins.reasoning.inference;
 
 import br.com.dizeno.reins.run.config.*;
 import br.com.dizeno.reins.run.config.settings.*;
+import br.com.dizeno.reins.reasoning.inference.llm.adapters.GeminiProviderAdapter;
 import br.com.dizeno.reins.reasoning.inference.llm.providers.gemini.GeminiClient;
-import br.com.dizeno.reins.reasoning.inference.llm.providers.gemini.GeminiPromptBuilder;
+import br.com.dizeno.reins.reasoning.inference.llm.registry.DefaultAdapterRegistry;
+import br.com.dizeno.reins.reasoning.inference.llm.service.DefaultLlmService;
 import br.com.dizeno.reins.reasoning.scripting.ConversationMessage;
 import org.junit.jupiter.api.Test;
 
@@ -29,13 +31,26 @@ import static org.mockito.Mockito.when;
 
 class InferenceServiceCachedContentTest {
 
+    private InferenceService buildServiceWithGeminiClient(GeminiClient geminiClient) {
+        DefaultAdapterRegistry registry = new DefaultAdapterRegistry();
+        registry.register(new GeminiProviderAdapter(geminiClient));
+        DefaultLlmService llmService = new DefaultLlmService(
+                registry,
+                new br.com.dizeno.reins.reasoning.inference.llm.registry.LlmProviderResolver(),
+                new br.com.dizeno.reins.reasoning.inference.llm.service.LlmCapabilityGuard(),
+                new br.com.dizeno.reins.reasoning.inference.llm.service.LlmResponseNormalizer(),
+                new br.com.dizeno.reins.reasoning.inference.llm.error.LlmErrorMapper(),
+                new br.com.dizeno.reins.reasoning.inference.llm.logging.LlmLifecycleLogger());
+        return new InferenceService(llmService);
+    }
+
     @Test
     void infer_withHistory_passesCachedContentMetadataToGeminiClient() throws Exception {
-        GeminiPromptBuilder promptBuilder = mock(GeminiPromptBuilder.class);
         GeminiClient geminiClient = mock(GeminiClient.class);
-        InferenceService service = new InferenceService(promptBuilder, geminiClient);
+        InferenceService service = buildServiceWithGeminiClient(geminiClient);
 
         ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
         GeminiSettings gemini = new GeminiSettings();
         gemini.setApiKey("k");
         gemini.setEndpoint("https://example.test");
@@ -58,11 +73,11 @@ class InferenceServiceCachedContentTest {
 
     @Test
     void infer_withHistory_disabledModeSkipsCachedContentUsage() throws Exception {
-        GeminiPromptBuilder promptBuilder = mock(GeminiPromptBuilder.class);
         GeminiClient geminiClient = mock(GeminiClient.class);
-        InferenceService service = new InferenceService(promptBuilder, geminiClient);
+        InferenceService service = buildServiceWithGeminiClient(geminiClient);
 
         ReinsConfig config = new ReinsConfig();
+        config.setProvider("gemini");
         GeminiSettings gemini = new GeminiSettings();
         gemini.setApiKey("k");
         gemini.setEndpoint("https://example.test");

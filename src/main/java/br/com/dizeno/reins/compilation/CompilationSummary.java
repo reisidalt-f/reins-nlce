@@ -11,20 +11,23 @@
 
 package br.com.dizeno.reins.compilation;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  * CompilationSummary is part of the core compilation lifecycle management, orchestrating file discovery, dependency resolution, and pipeline execution in the reins architecture.
  * Acts as a component managing compilation summary.
  */
 public class CompilationSummary {
-    private int discovered;
-    private int processed;
-    private int compiled;
-    private int skipped;
-    private int failed;
-    private int dependencyLinks;
-    private int reprocessedDueToStaleness;
-    private int reprocessedDueToChildChange;
-    private int validateAllPromoted;
+    private final AtomicInteger discovered = new AtomicInteger(0);
+    private final AtomicInteger processed = new AtomicInteger(0);
+    private final AtomicInteger compiled = new AtomicInteger(0);
+    private final AtomicInteger noChange = new AtomicInteger(0);
+    private final AtomicInteger skipped = new AtomicInteger(0);
+    private final AtomicInteger failed = new AtomicInteger(0);
+    private final AtomicInteger dependencyLinks = new AtomicInteger(0);
+    private final AtomicInteger reprocessedDueToStaleness = new AtomicInteger(0);
+    private final AtomicInteger reprocessedDueToChildChange = new AtomicInteger(0);
+    private final AtomicInteger validateAllPromoted = new AtomicInteger(0);
 
     /**
      * Gets the discovered.
@@ -32,7 +35,7 @@ public class CompilationSummary {
      * @return the numeric value
      */
     public int getDiscovered() {
-        return discovered;
+        return discovered.get();
     }
 
     /**
@@ -41,7 +44,7 @@ public class CompilationSummary {
      * @param discovered the discovered
      */
     public void setDiscovered(int discovered) {
-        this.discovered = discovered;
+        this.discovered.set(discovered);
     }
 
     /**
@@ -50,7 +53,7 @@ public class CompilationSummary {
      * @return the numeric value
      */
     public int getProcessed() {
-        return processed;
+        return processed.get();
     }
 
     /**
@@ -58,7 +61,7 @@ public class CompilationSummary {
      *
      */
     public void incrementProcessed() {
-        this.processed++;
+        this.processed.incrementAndGet();
     }
 
     /**
@@ -67,7 +70,7 @@ public class CompilationSummary {
      * @return the numeric value
      */
     public int getCompiled() {
-        return compiled;
+        return compiled.get();
     }
 
     /**
@@ -75,7 +78,24 @@ public class CompilationSummary {
      *
      */
     public void incrementCompiled() {
-        this.compiled++;
+        this.compiled.incrementAndGet();
+    }
+
+    /**
+     * Gets the noChange count.
+     *
+     * @return the numeric value
+     */
+    public int getNoChange() {
+        return noChange.get();
+    }
+
+    /**
+     * Increment NoChange.
+     *
+     */
+    public void incrementNoChange() {
+        this.noChange.incrementAndGet();
     }
 
     /**
@@ -84,7 +104,7 @@ public class CompilationSummary {
      * @return the numeric value
      */
     public int getSkipped() {
-        return skipped;
+        return skipped.get();
     }
 
     /**
@@ -92,7 +112,7 @@ public class CompilationSummary {
      *
      */
     public void incrementSkipped() {
-        this.skipped++;
+        this.skipped.incrementAndGet();
     }
 
     /**
@@ -101,7 +121,7 @@ public class CompilationSummary {
      * @return the numeric value
      */
     public int getFailed() {
-        return failed;
+        return failed.get();
     }
 
     /**
@@ -109,7 +129,7 @@ public class CompilationSummary {
      *
      */
     public void incrementFailed() {
-        this.failed++;
+        this.failed.incrementAndGet();
     }
 
     /**
@@ -118,7 +138,7 @@ public class CompilationSummary {
      * @return the numeric value
      */
     public int getDependencyLinks() {
-        return dependencyLinks;
+        return dependencyLinks.get();
     }
 
     /**
@@ -127,7 +147,7 @@ public class CompilationSummary {
      * @param dependencyLinks the dependency links
      */
     public void setDependencyLinks(int dependencyLinks) {
-        this.dependencyLinks = dependencyLinks;
+        this.dependencyLinks.set(dependencyLinks);
     }
 
     /**
@@ -136,7 +156,7 @@ public class CompilationSummary {
      * @return the numeric value
      */
     public int getReprocessedDueToStaleness() {
-        return reprocessedDueToStaleness;
+        return reprocessedDueToStaleness.get();
     }
 
     /**
@@ -144,7 +164,7 @@ public class CompilationSummary {
      *
      */
     public void incrementReprocessedDueToStaleness() {
-        this.reprocessedDueToStaleness++;
+        this.reprocessedDueToStaleness.incrementAndGet();
     }
 
     /**
@@ -153,7 +173,7 @@ public class CompilationSummary {
      * @return the numeric value
      */
     public int getReprocessedDueToChildChange() {
-        return reprocessedDueToChildChange;
+        return reprocessedDueToChildChange.get();
     }
 
     /**
@@ -161,7 +181,7 @@ public class CompilationSummary {
      *
      */
     public void incrementReprocessedDueToChildChange() {
-        this.reprocessedDueToChildChange++;
+        this.reprocessedDueToChildChange.incrementAndGet();
     }
 
     /**
@@ -170,7 +190,7 @@ public class CompilationSummary {
      * @return the numeric value
      */
     public int getValidateAllPromoted() {
-        return validateAllPromoted;
+        return validateAllPromoted.get();
     }
 
     /**
@@ -180,7 +200,7 @@ public class CompilationSummary {
      */
     public void addValidateAllPromoted(int count) {
         if (count > 0) {
-            this.validateAllPromoted += count;
+            this.validateAllPromoted.addAndGet(count);
         }
     }
 }

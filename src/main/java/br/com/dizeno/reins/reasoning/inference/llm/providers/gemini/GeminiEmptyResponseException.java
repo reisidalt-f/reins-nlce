@@ -13,12 +13,14 @@ package br.com.dizeno.reins.reasoning.inference.llm.providers.gemini;
 
 import java.io.IOException;
 
+import br.com.dizeno.reins.reasoning.inference.llm.error.LlmEmptyResponseException;
+
 /**
  * GeminiEmptyResponseException is part of the general application functions in
  * the reins architecture.
  * Acts as a exception representing errors in its prefix operations.
  */
-public class GeminiEmptyResponseException extends IOException {
+public class GeminiEmptyResponseException extends LlmEmptyResponseException {
     private final int totalAttempts;
     private final int noUsableContentCount;
 

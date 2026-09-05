@@ -25,7 +25,7 @@ public class FilePermissionEnforcementTest {
 
     @BeforeEach
     void setUp() {
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
+        FileToolsSettings settings = new FileToolsSettings();
         settings.setMain("read,list,list_compiled");
         settings.setTest("read,write");
         settings.setTarget("list,read,list_compiled");
@@ -94,7 +94,7 @@ public class FilePermissionEnforcementTest {
 
         @Test
         void testListTokenDoesNotGrantListCompiledFiles() {
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
+        FileToolsSettings settings = new FileToolsSettings();
         settings.setMain("list");
         br.com.dizeno.reins.reasoning.tooling.file.FilePolicy splitPolicy = new br.com.dizeno.reins.reasoning.tooling.file.FilePolicy(settings);
 
@@ -106,7 +106,7 @@ public class FilePermissionEnforcementTest {
 
         @Test
         void testListCompiledTokenDoesNotGrantListFiles() {
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
+        FileToolsSettings settings = new FileToolsSettings();
         settings.setMain("list_compiled");
         br.com.dizeno.reins.reasoning.tooling.file.FilePolicy splitPolicy = new br.com.dizeno.reins.reasoning.tooling.file.FilePolicy(settings);
 
@@ -135,9 +135,9 @@ public class FilePermissionEnforcementTest {
     @Test
     void testGetEnabledBasesForWriteOperation() {
         var bases = policy.getEnabledBasesForOperation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE);
-        assertEquals(2, bases.size(), "write_file should be enabled on test and target");
+        assertEquals(1, bases.size(), "write_file should only be enabled on test (target has no write token in this config)");
         assertTrue(bases.contains(br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TEST));
-        assertTrue(bases.contains(br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET));
+        assertFalse(bases.contains(br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET));
         assertFalse(bases.contains(br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.MAIN));
     }
 

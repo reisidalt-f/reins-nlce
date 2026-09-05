@@ -45,7 +45,7 @@ public class CleanupService {
     
      
     /**
-     * Executes the operation cleanup.
+     * Executes the operation cleanup for all tracked sources.
      *
      * @param projectRoot the root path of the project
      * @param validator the path validator for security boundary checks
@@ -53,6 +53,20 @@ public class CleanupService {
      */
     public CleanupOutcomeSummary executeCleanup(Path projectRoot,
                                                 PathValidator validator) {
+        return executeCleanup(projectRoot, validator, (List<File>) null);
+    }
+
+    /**
+     * Executes the operation cleanup, optionally scoped to specific target source files or directories.
+     *
+     * @param projectRoot the root path of the project
+     * @param validator the path validator for security boundary checks
+     * @param targetSourceFiles explicit list of target source files/directories to clean, or null/empty for full cleanup
+     * @return the resulting summary
+     */
+    public CleanupOutcomeSummary executeCleanup(Path projectRoot,
+                                                PathValidator validator,
+                                                List<File> targetSourceFiles) {
         Instant completedAt = Instant.now();
         List<CleanupOutcome> outcomes = new ArrayList<>();
         List<TargetEntry> targets = new ArrayList<>();
@@ -60,8 +74,15 @@ public class CleanupService {
         CompilationTrackingStore trackingStore = new CompilationTrackingStore();
 
         try {
-            
-            List<String> trackedSources = trackingStore.listAllTrackedSourcePaths(projectRoot);
+            List<String> allTrackedSources = trackingStore.listAllTrackedSourcePaths(projectRoot);
+            List<String> trackedSources;
+
+            if (targetSourceFiles != null && !targetSourceFiles.isEmpty()) {
+                trackedSources = filterTrackedSources(projectRoot, allTrackedSources, targetSourceFiles);
+            } else {
+                trackedSources = allTrackedSources;
+            }
+
             for (String sourcePath : trackedSources) {
                 Optional<SourceTrackingRecord> record = trackingStore.load(projectRoot, sourcePath);
                 if (record.isPresent()) {
@@ -69,7 +90,6 @@ public class CleanupService {
                 }
             }
 
-            
             collectTrackingArtifactTargets(projectRoot, trackingStore, trackedSources, targets, seenCleanupPaths);
 
             CleanupTargetValidator targetValidator = new CleanupTargetValidator(validator);
@@ -239,4 +259,36 @@ public class CleanupService {
                 recordsUpdated
             );
     }
+
+    private List<String> filterTrackedSources(Path projectRoot,
+                                             List<String> allTrackedSources,
+                                             List<File> targetSourceFiles) {
+        List<String> result = new ArrayList<>();
+        Set<Path> targetPaths = new HashSet<>();
+        for (File file : targetSourceFiles) {
+            if (file != null) {
+                targetPaths.add(file.toPath().toAbsolutePath().normalize());
+            }
+        }
+
+        for (String sourcePath : allTrackedSources) {
+            try {
+                Path resolvedSource = TrackedPathResolver.resolveTrackedPath(projectRoot, sourcePath, null)
+                        .toAbsolutePath().normalize();
+                for (Path targetPath : targetPaths) {
+                    if (resolvedSource.equals(targetPath)) {
+                        result.add(sourcePath);
+                        break;
+                    } else if (java.nio.file.Files.isDirectory(targetPath) && resolvedSource.startsWith(targetPath)) {
+                        result.add(sourcePath);
+                        break;
+                    }
+                }
+            } catch (Exception ignored) {
+                // If resolving path fails, keep searching other matches
+            }
+        }
+        return result;
+    }
 }
+

@@ -322,4 +322,196 @@ public class ReinsLibrary {
     public static int addNote(File baseDir, ReinsConfig pluginConfig, String source, String note, ReasoningNote.Origin origin, Log log) throws Exception {
         return new ReinsRunner().addNote(pluginConfig, baseDir, source, note, origin, log);
     }
+
+    /**
+     * List Notes.
+     *
+     * @param baseDir the base dir
+     * @param config the Reins configuration settings
+     * @param source the source (optional)
+     * @return map of source path to list of reasoning notes
+     */
+    public static java.util.Map<String, java.util.List<ReasoningNote>> listNotes(File baseDir, Map<String, Object> config, String source) throws Exception {
+        ReinsConfig pluginConfig = ReinsConfigLoader.load(null, null, config, baseDir);
+        return listNotes(baseDir, pluginConfig, source, new ReinsSystemOutLogger(pluginConfig.isVerbose(), pluginConfig.isVerbose()));
+    }
+
+    /**
+     * List Notes.
+     *
+     * @param baseDir the base dir
+     * @param config the Reins configuration settings
+     * @param source the source (optional)
+     * @param log the logger instance
+     * @return map of source path to list of reasoning notes
+     */
+    public static java.util.Map<String, java.util.List<ReasoningNote>> listNotes(File baseDir, Map<String, Object> config, String source, Log log) throws Exception {
+        ReinsConfig pluginConfig = ReinsConfigLoader.load(null, null, config, baseDir);
+        return listNotes(baseDir, pluginConfig, source, log);
+    }
+
+    /**
+     * List Notes.
+     *
+     * @param baseDir the base dir
+     * @param properties the properties
+     * @param source the source (optional)
+     * @return map of source path to list of reasoning notes
+     */
+    public static java.util.Map<String, java.util.List<ReasoningNote>> listNotes(File baseDir, Properties properties, String source) throws Exception {
+        ReinsConfig pluginConfig = ReinsConfigLoader.load(null, null, properties, null, baseDir);
+        return listNotes(baseDir, pluginConfig, source, new ReinsSystemOutLogger(pluginConfig.isVerbose(), pluginConfig.isVerbose()));
+    }
+
+    /**
+     * List Notes.
+     *
+     * @param baseDir the base dir
+     * @param properties the properties
+     * @param source the source (optional)
+     * @param log the logger instance
+     * @return map of source path to list of reasoning notes
+     */
+    public static java.util.Map<String, java.util.List<ReasoningNote>> listNotes(File baseDir, Properties properties, String source, Log log) throws Exception {
+        ReinsConfig pluginConfig = ReinsConfigLoader.load(null, null, properties, null, baseDir);
+        return listNotes(baseDir, pluginConfig, source, log);
+    }
+
+    /**
+     * List Notes.
+     *
+     * @param baseDir the base dir
+     * @param configFile the config file
+     * @param source the source (optional)
+     * @return map of source path to list of reasoning notes
+     */
+    public static java.util.Map<String, java.util.List<ReasoningNote>> listNotes(File baseDir, File configFile, String source) throws Exception {
+        String[] cliArgs = configFile != null ? new String[]{"--config", configFile.getAbsolutePath()} : null;
+        ReinsConfig pluginConfig = ReinsConfigLoader.load(cliArgs, null, null, baseDir);
+        return listNotes(baseDir, pluginConfig, source, new ReinsSystemOutLogger(pluginConfig.isVerbose(), pluginConfig.isVerbose()));
+    }
+
+    /**
+     * List Notes.
+     *
+     * @param baseDir the base dir
+     * @param configFile the config file
+     * @param source the source (optional)
+     * @param log the logger instance
+     * @return map of source path to list of reasoning notes
+     */
+    public static java.util.Map<String, java.util.List<ReasoningNote>> listNotes(File baseDir, File configFile, String source, Log log) throws Exception {
+        String[] cliArgs = configFile != null ? new String[]{"--config", configFile.getAbsolutePath()} : null;
+        ReinsConfig pluginConfig = ReinsConfigLoader.load(cliArgs, null, null, baseDir);
+        return listNotes(baseDir, pluginConfig, source, log);
+    }
+
+    /**
+     * List Notes.
+     *
+     * @param baseDir the base dir
+     * @param pluginConfig the plugin config
+     * @param source the source (optional)
+     * @param log the logger instance
+     * @return map of source path to list of reasoning notes
+     */
+    public static java.util.Map<String, java.util.List<ReasoningNote>> listNotes(File baseDir, ReinsConfig pluginConfig, String source, Log log) throws Exception {
+        return new ReinsRunner().listNotes(pluginConfig, baseDir, source, log);
+    }
+
+    /**
+     * Clear Notes.
+     *
+     * @param baseDir the base dir
+     * @param config the Reins configuration settings
+     * @param source the source (optional)
+     * @return total notes cleared
+     */
+    public static int clearNotes(File baseDir, Map<String, Object> config, String source) throws Exception {
+        ReinsConfig pluginConfig = ReinsConfigLoader.load(null, null, config, baseDir);
+        return clearNotes(baseDir, pluginConfig, source, new ReinsSystemOutLogger(pluginConfig.isVerbose(), pluginConfig.isVerbose()));
+    }
+
+    /**
+     * Clear Notes.
+     *
+     * @param baseDir the base dir
+     * @param config the Reins configuration settings
+     * @param source the source (optional)
+     * @param log the logger instance
+     * @return total notes cleared
+     */
+    public static int clearNotes(File baseDir, Map<String, Object> config, String source, Log log) throws Exception {
+        ReinsConfig pluginConfig = ReinsConfigLoader.load(null, null, config, baseDir);
+        return clearNotes(baseDir, pluginConfig, source, log);
+    }
+
+    /**
+     * Clear Notes.
+     *
+     * @param baseDir the base dir
+     * @param properties the properties
+     * @param source the source (optional)
+     * @return total notes cleared
+     */
+    public static int clearNotes(File baseDir, Properties properties, String source) throws Exception {
+        ReinsConfig pluginConfig = ReinsConfigLoader.load(null, null, properties, null, baseDir);
+        return clearNotes(baseDir, pluginConfig, source, new ReinsSystemOutLogger(pluginConfig.isVerbose(), pluginConfig.isVerbose()));
+    }
+
+    /**
+     * Clear Notes.
+     *
+     * @param baseDir the base dir
+     * @param properties the properties
+     * @param source the source (optional)
+     * @param log the logger instance
+     * @return total notes cleared
+     */
+    public static int clearNotes(File baseDir, Properties properties, String source, Log log) throws Exception {
+        ReinsConfig pluginConfig = ReinsConfigLoader.load(null, null, properties, null, baseDir);
+        return clearNotes(baseDir, pluginConfig, source, log);
+    }
+
+    /**
+     * Clear Notes.
+     *
+     * @param baseDir the base dir
+     * @param configFile the config file
+     * @param source the source (optional)
+     * @return total notes cleared
+     */
+    public static int clearNotes(File baseDir, File configFile, String source) throws Exception {
+        String[] cliArgs = configFile != null ? new String[]{"--config", configFile.getAbsolutePath()} : null;
+        ReinsConfig pluginConfig = ReinsConfigLoader.load(cliArgs, null, null, baseDir);
+        return clearNotes(baseDir, pluginConfig, source, new ReinsSystemOutLogger(pluginConfig.isVerbose(), pluginConfig.isVerbose()));
+    }
+
+    /**
+     * Clear Notes.
+     *
+     * @param baseDir the base dir
+     * @param configFile the config file
+     * @param source the source (optional)
+     * @param log the logger instance
+     * @return total notes cleared
+     */
+    public static int clearNotes(File baseDir, File configFile, String source, Log log) throws Exception {
+        String[] cliArgs = configFile != null ? new String[]{"--config", configFile.getAbsolutePath()} : null;
+        ReinsConfig pluginConfig = ReinsConfigLoader.load(cliArgs, null, null, baseDir);
+        return clearNotes(baseDir, pluginConfig, source, log);
+    }
+
+    /**
+     * Clear Notes.
+     *
+     * @param baseDir the base dir
+     * @param pluginConfig the plugin config
+     * @param source the source (optional)
+     * @param log the logger instance
+     * @return total notes cleared
+     */
+    public static int clearNotes(File baseDir, ReinsConfig pluginConfig, String source, Log log) throws Exception {
+        return new ReinsRunner().clearNotes(pluginConfig, baseDir, source, log);
+    }
 }

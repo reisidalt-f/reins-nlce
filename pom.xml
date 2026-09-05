@@ -4,7 +4,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>br.com.dizeno</groupId>
-  <artifactId>reins-nlce-plugin</artifactId>
+  <artifactId>reins-nlce</artifactId>
   <version>0.0.1-SNAPSHOT</version>
   <packaging>maven-plugin</packaging>
 
@@ -70,6 +70,17 @@
       <artifactId>freemarker</artifactId>
       <version>2.3.34</version>
     </dependency>
+    <dependency>
+      <groupId>io.github.java-diff-utils</groupId>
+      <artifactId>java-diff-utils</artifactId>
+      <version>4.15</version>
+    </dependency>
+    <dependency>
+      <groupId>io.smallrye.config</groupId>
+      <artifactId>smallrye-config</artifactId>
+      <version>3.8.3</version>
+    </dependency>
+
 
     <dependency>
       <groupId>org.junit.jupiter</groupId>
@@ -139,6 +150,27 @@
         <configuration>
           <release>${maven.compiler.release}</release>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.1.1</version>
+        <executions>
+          <execution>
+            <id>install-reins-script</id>
+            <phase>install</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>bash</executable>
+              <arguments>
+                <argument>-c</argument>
+                <argument>mkdir -p "${user.home}/.local/bin" &amp;&amp; cp "${project.basedir}/script/reins" "${user.home}/.local/bin/reins" &amp;&amp; chmod +x "${user.home}/.local/bin/reins"</argument>
+              </arguments>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

@@ -27,7 +27,7 @@ public final class ReferenceDepthPolicy {
     }
 
     private static final String VALID_VALUES_MESSAGE =
-            "context.referencesTreeDepth must be 0, a non-negative integer, or *.";
+            "context.referencesTree.depth must be 0, a non-negative integer, or *.";
 
     private final Mode mode;
     private final Integer maxDepth;
@@ -47,7 +47,7 @@ public final class ReferenceDepthPolicy {
      * @return the resolved or constructed object
      */
     public static ReferenceDepthPolicy defaultPolicy() {
-        return new ReferenceDepthPolicy(Mode.BOUNDED, 1, "1", true);
+        return new ReferenceDepthPolicy(Mode.BOUNDED, 3, "3", true);
     }
 
     /**
@@ -215,7 +215,7 @@ public final class ReferenceDepthPolicy {
             return "disabled (0)";
         }
         if (defaulted) {
-            return "default (1)";
+            return "default (3)";
         }
         return "bounded (" + maxDepth + ")";
     }

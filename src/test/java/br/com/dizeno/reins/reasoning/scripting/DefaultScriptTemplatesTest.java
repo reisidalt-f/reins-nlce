@@ -30,7 +30,7 @@ class DefaultScriptTemplatesTest {
         assertTrue(registry.isReady());
         assertEquals(11, registry.getAllScripts().size());
         assertEquals(10, ScriptRegistry.requiredScriptCountForCycle(false));
-        assertEquals(4, ScriptRegistry.requiredScriptCountForCycle(true));
+        assertEquals(10, ScriptRegistry.requiredScriptCountForCycle(true));
     }
 
     @Test
@@ -52,8 +52,8 @@ class DefaultScriptTemplatesTest {
         assertTrue(phaseNames.contains("tool-result"));
 
         String toolResult = evaluator.evaluate("tool-result.ftl", context);
-        assertTrue(toolResult.contains("MCP_RESULT"));
-        assertTrue(toolResult.contains("status: SUCCESS"));
+        assertTrue(toolResult.contains("--reins-boundary"));
+        assertTrue(toolResult.contains("SUCCESS"));
 
         String attachmentList = evaluator.evaluate("attachment-list.ftl", context);
         assertTrue(attachmentList.contains("main:src/main/nl/source.md"));
@@ -90,14 +90,7 @@ class DefaultScriptTemplatesTest {
                 "text/plain");
 
         ReasoningScriptViews.ConfigView config = new ReasoningScriptViews.ConfigView(
-                "gemini-2.5-pro",
-                5,
-                false,
-                false,
-                false,
-                true,
-                false,
-                null);
+                new br.com.dizeno.reins.run.config.ReinsConfig());
 
         ReasoningScriptViews.CycleView cycle = new ReasoningScriptViews.CycleView(
                 "cycle-1",
@@ -116,7 +109,7 @@ class DefaultScriptTemplatesTest {
                 false,
                 ToolOperationsReference.build(FilePolicy.allPermissive(), false, true, true, false));
 
-        ReasoningScriptViews.ToolResultView mcpResult = new ReasoningScriptViews.ToolResultView(
+        ReasoningScriptViews.ToolResultView toolResult = new ReasoningScriptViews.ToolResultView(
                 "SUCCESS",
                 "READ_FILE",
                 "main:src/main/nl/source.md",
@@ -146,7 +139,7 @@ class DefaultScriptTemplatesTest {
                 .cycle(cycle)
                 .policy(policy)
                 .referenceTree("source.md\n├── ref.md")
-                .currentToolResult(mcpResult)
+                .currentToolResult(toolResult)
                 .build();
     }
 }

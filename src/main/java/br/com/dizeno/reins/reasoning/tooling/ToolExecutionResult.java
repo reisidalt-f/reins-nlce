@@ -16,14 +16,14 @@ import java.util.List;
 import java.util.Collections;
 
 /**
- * ToolExecutionResult is part of the tool execution environments (like MCP tools and local file tools) exposed to LLMs in the reins architecture.
+ * ToolExecutionResult is part of the tool execution environments (like tools and local file tools) exposed to LLMs in the reins architecture.
  * Acts as a data carrier representation of its prefix information.
  */
 public class ToolExecutionResult {
     public static final String SCOPE_VIOLATION_CODE = "scope_violation";
 
     /**
-     * CompiledFileStatus is part of the tool execution environments (like MCP tools and local file tools) exposed to LLMs in the reins architecture.
+     * CompiledFileStatus is part of the tool execution environments (like tools and local file tools) exposed to LLMs in the reins architecture.
      * Acts as a component managing compiled file status.
      */
     public static class CompiledFileStatus {
@@ -106,7 +106,7 @@ public class ToolExecutionResult {
     }
 
     /**
-     * ReadFileStatus is part of the tool execution environments (like MCP tools and local file tools) exposed to LLMs in the reins architecture.
+     * ReadFileStatus is part of the tool execution environments (like tools and local file tools) exposed to LLMs in the reins architecture.
      * Acts as a component managing read file status.
      */
     public static class ReadFileStatus {
@@ -189,7 +189,7 @@ public class ToolExecutionResult {
     }
 
     /**
-     * Status is part of the tool execution environments (like MCP tools and local file tools) exposed to LLMs in the reins architecture.
+     * Status is part of the tool execution environments (like tools and local file tools) exposed to LLMs in the reins architecture.
      * Acts as a component managing status.
      */
     public enum Status {

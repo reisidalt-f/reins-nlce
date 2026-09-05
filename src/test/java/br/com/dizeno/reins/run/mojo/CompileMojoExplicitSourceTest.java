@@ -27,6 +27,7 @@ import java.io.File;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -65,15 +66,16 @@ class CompileMojoExplicitSourceTest {
         mojo.setLog(log);
 
         setField(mojo, "project", project);
-        setField(mojo, "includePattern", "**/*.md");
-        setField(mojo, "mainNlRoot", projectDir.resolve("src/main/nl").toFile());
-        setField(mojo, "testNlRoot", projectDir.resolve("src/test/nl").toFile());
-        setField(mojo, "enableProjectInference", false);
+        Files.createDirectories(projectDir.resolve("src/main/nl"));
+        Files.createDirectories(projectDir.resolve("src/test/nl"));
+        java.util.Map<String, File> sourceBases = new java.util.LinkedHashMap<>();
+        sourceBases.put("main", projectDir.resolve("src/main/nl").toFile());
+        sourceBases.put("test", projectDir.resolve("src/test/nl").toFile());
+        setField(mojo, "sources", sourceBases);
 
         TargetSettings targetSettings = new TargetSettings();
-        targetSettings.setProject(projectDir.toFile());
-        targetSettings.setMain("src/main/java");
-        targetSettings.setTest("src/test/java");
+        targetSettings.setTargetBase("main", "src/main/java");
+        targetSettings.setTargetBase("test", "src/test/java");
         setField(mojo, "target", targetSettings);
 
         GeminiSettings gemini = new GeminiSettings();
@@ -82,11 +84,14 @@ class CompileMojoExplicitSourceTest {
         gemini.setEndpoint("https://generativelanguage.googleapis.com");
         gemini.setTimeoutSeconds(30);
         gemini.setRetryAttempts(1);
+        setField(mojo, "provider", "gemini");
         setField(mojo, "gemini", gemini);
 
         when(preFilterService.filter(any(), any(), any(), any()))
                 .thenAnswer(inv -> PreFilterResult.failOpen(inv.getArgument(0)));
-        when(compilationService.processFiles(any(), any(Boolean.class), any(), any(), any()))
+        when(compilationService.processFiles(any(PreFilterResult.class), any(), any(), any()))
+                .thenReturn(new CompilationSummary());
+        when(compilationService.processFiles(any(List.class), any(), any(), any()))
                 .thenReturn(new CompilationSummary());
     }
 
@@ -101,9 +106,27 @@ class CompileMojoExplicitSourceTest {
         mojo.execute();
 
         verify(compilationService).processFiles(
-            argThat(processed -> processed.size() == 1
-                && processed.get(0).toPath().endsWith("src/main/nl/chosen.md")),
-            any(Boolean.class), any(), any(), any());
+            argThat((PreFilterResult pfr) -> pfr != null && pfr.getSourceFiles().size() == 1
+                && pfr.getSourceFiles().get(0).toPath().endsWith("src/main/nl/chosen.md")),
+            any(ReinsConfig.class), any(Path.class), any(Log.class));
+    }
+
+    @Test
+    void execute_multipleExplicitSources_processesAllMatchedSources() throws Exception {
+        Path mainRoot = projectDir.resolve("src/main/nl");
+        Files.createDirectories(mainRoot);
+        Files.writeString(mainRoot.resolve("first.md"), "# first");
+        Files.writeString(mainRoot.resolve("second.md"), "# second");
+        Files.writeString(mainRoot.resolve("third.md"), "# third");
+        setField(mojo, "source", "first.md, second.md");
+
+        mojo.execute();
+
+        verify(compilationService).processFiles(
+            argThat((PreFilterResult pfr) -> pfr != null && pfr.getSourceFiles().size() == 2
+                && pfr.getSourceFiles().stream().anyMatch(f -> f.getName().equals("first.md"))
+                && pfr.getSourceFiles().stream().anyMatch(f -> f.getName().equals("second.md"))),
+            any(ReinsConfig.class), any(Path.class), any(Log.class));
     }
 
     @Test
@@ -115,7 +138,7 @@ class CompileMojoExplicitSourceTest {
 
         mojo.execute();
 
-        verify(compilationService, never()).processFiles(any(), any(Boolean.class), any(), any(), any());
+        verify(compilationService, never()).processFiles(any(List.class), any(), any(), any());
         verify(log).warn("Explicit source directory contains zero eligible files: src/main/nl/empty-dir");
     }
 
@@ -131,9 +154,28 @@ class CompileMojoExplicitSourceTest {
         mojo.execute();
 
         verify(compilationService).processFiles(
-                argThat(processed -> processed.size() == 2),
-                any(Boolean.class), any(), any(), any());
+                any(PreFilterResult.class), any(ReinsConfig.class), any(Path.class), any(Log.class));
         verify(log, never()).info(org.mockito.ArgumentMatchers.contains("Explicit source mode active"));
+    }
+
+    @Test
+    void execute_explicitSources_runsThroughDependencyGraphAndSupportsMultiThreading() throws Exception {
+        Path mainRoot = projectDir.resolve("src/main/nl");
+        Files.createDirectories(mainRoot);
+        Files.writeString(mainRoot.resolve("parent.md"), "# parent\nSee [child](child.md)");
+        Files.writeString(mainRoot.resolve("child.md"), "# child");
+        setField(mojo, "source", "parent.md, child.md");
+
+        BuildSettings buildSettings = new BuildSettings();
+        buildSettings.setCompilationThreads(4);
+        setField(mojo, "build", buildSettings);
+
+        mojo.execute();
+
+        verify(compilationService).processFiles(
+            argThat((PreFilterResult pfr) -> pfr != null && pfr.getSourceFiles().size() == 2),
+            argThat((ReinsConfig cfg) -> cfg.getBuild() != null && cfg.getBuild().getCompilationThreads() == 4),
+            any(Path.class), any(Log.class));
     }
 
     private static void setField(Object target, String name, Object value) throws Exception {

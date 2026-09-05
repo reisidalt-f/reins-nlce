@@ -102,7 +102,7 @@ class FreezeTrackingStateTest {
                 List.of()
         ));
         MarkdownDependencyGraph graph = new MarkdownDependencyGraph(nodes, Map.of(), Map.of(), List.of(SOURCE_PATH));
-        when(graphBuilder.build(any(), any(), any())).thenReturn(graph);
+        when(graphBuilder.build(any(), any(), any(), any())).thenReturn(graph);
         when(processingOrderResolver.resolve(graph)).thenReturn(List.of(SOURCE_PATH));
         
         when(trackingStore.canonicalizePath(anyString())).thenAnswer(inv -> inv.getArgument(0, String.class));
@@ -184,7 +184,7 @@ class FreezeTrackingStateTest {
         
         ReinsConfig config = buildConfig(true);
         MarkdownDependencyGraph emptyGraph = new MarkdownDependencyGraph(Map.of(), Map.of(), Map.of(), List.of());
-        when(graphBuilder.build(any(), any(), any())).thenReturn(emptyGraph);
+        when(graphBuilder.build(any(), any(), any(), any())).thenReturn(emptyGraph);
         when(processingOrderResolver.resolve(emptyGraph)).thenReturn(List.of());
 
         service.processFiles(List.of(), config, tempDir, log);
@@ -201,7 +201,7 @@ class FreezeTrackingStateTest {
 
         ReinsConfig config = buildConfig(true);
         MarkdownDependencyGraph emptyGraph = new MarkdownDependencyGraph(Map.of(), Map.of(), Map.of(), List.of());
-        when(graphBuilder.build(any(), any(), any())).thenReturn(emptyGraph);
+        when(graphBuilder.build(any(), any(), any(), any())).thenReturn(emptyGraph);
         when(processingOrderResolver.resolve(emptyGraph)).thenReturn(List.of());
 
         service.processFiles(List.of(), config, tempDir, log);
@@ -237,45 +237,14 @@ class FreezeTrackingStateTest {
     }
 
     @Test
-    void freezeDisabled_skipRecord_preservesExistingTrackings() throws Exception {
-        SourceTrackingRecord priorRecord = new SourceTrackingRecord();
-        priorRecord.setSourcePath(CANONICAL_PATH);
-        priorRecord.setSourceCategory("main");
-        priorRecord.setSourceHash("old-hash");
-        priorRecord.setBlockFingerprints(List.of("old-fingerprint"));
-        priorRecord.setModel("gemini-2.0-flash");
-        priorRecord.setOutputPolicy("src/main/java");
-        priorRecord.setResolvedTargetRoot("main");
-        priorRecord.setCompiledFiles(Map.of(
-                "main:com/example/Feature.java",
-                new FileTrackingDetails(CANONICAL_PATH, "main", 10L)));
-        priorRecord.setInspectedFiles(Map.of(
-                "main:docs/context.md",
-                new FileTrackingDetails(CANONICAL_PATH, "main", 20L)));
-        priorRecord.setMarkdownReferences(Map.of(
-                "main:shared/ref.md",
-                new FileTrackingDetails(CANONICAL_PATH, "main", 30L)));
-        when(trackingStore.load(eq(tempDir), eq(CANONICAL_PATH))).thenReturn(Optional.of(priorRecord));
-
+    void freezeDisabled_skipRecord_notPersisted() throws Exception {
         ReasoningResult result = successResult(List.of());
         when(reasoningService.runCycle(any(), any())).thenReturn(result);
 
         ReinsConfig config = buildConfig(false);
         service.processFiles(List.of(tempDir.resolve(SOURCE_PATH).toFile()), config, tempDir, log);
 
-        ArgumentCaptor<SourceTrackingRecord> recordCaptor = ArgumentCaptor.forClass(SourceTrackingRecord.class);
-        verify(trackingStore).save(eq(tempDir), eq(CANONICAL_PATH), recordCaptor.capture());
-
-        SourceTrackingRecord savedRecord = recordCaptor.getValue();
-        assertEquals("skipped", savedRecord.getLastStatus());
-        assertNotNull(savedRecord.getLastCompiledAt());
-        
-        assertEquals(1, savedRecord.getBlockFingerprints().size());
-        assertEquals(savedRecord.getSourceHash(), savedRecord.getBlockFingerprints().get(0));
-        
-        assertEquals(Set.of("main:com/example/Feature.java"), savedRecord.getCompiledFiles().keySet());
-        assertEquals(Set.of("main:docs/context.md"), savedRecord.getInspectedFiles().keySet());
-        assertEquals(Set.of("main:shared/ref.md"), savedRecord.getMarkdownReferences().keySet());
+        verify(trackingStore, never()).save(any(), any(), any());
     }
 
     @Test
@@ -293,32 +262,6 @@ class FreezeTrackingStateTest {
         service.processFiles(List.of(), config, tempDir, log);
 
         verify(trackingStore).delete(eq(tempDir), eq(STALE_SOURCE_PATH));
-    }
-
-    
-    
-    
-
-    @Test
-    void freezeEnabled_skipRecord_freezeLogMessageEmitted() throws Exception {
-        ReasoningResult result = new ReasoningResult();
-        result.setFinalIntent("finish_success");
-        result.setWrittenPaths(List.of());
-        result.setReadMarkdownPaths(List.of());
-        result.setInspectedPaths(List.of());
-        result.setToolInfoPhrases(List.of());
-        result.setUserFacingMessages(List.of());
-        when(reasoningService.runCycle(any(), any())).thenReturn(result);
-
-        ReinsConfig config = buildConfig(true);
-        service.processFiles(List.of(tempDir.resolve(SOURCE_PATH).toFile()), config, tempDir, log);
-
-        ArgumentCaptor<String> logCaptor = ArgumentCaptor.forClass(String.class);
-        verify(log, org.mockito.Mockito.atLeastOnce()).info(logCaptor.capture());
-        boolean hasFreezeLog = logCaptor.getAllValues().stream()
-                .anyMatch(msg -> msg != null && msg.contains("[tracking]") && msg.contains("Freeze mode"));
-        org.junit.jupiter.api.Assertions.assertTrue(hasFreezeLog,
-                "Expected a [tracking] Freeze mode log message but none was found");
     }
 
     @Test
@@ -349,11 +292,11 @@ class FreezeTrackingStateTest {
         gemini.setEndpoint("https://generativelanguage.googleapis.com");
         config.setGemini(gemini);
         config.setFailOnError(false);
-        config.setScanRoots(List.of(tempDir.resolve("src/main/nl").toFile()));
+        config.setSourceBase("main", tempDir.resolve("src/main/nl").toFile());
 
         TargetSettings target = new TargetSettings();
-        target.setMain("src/main/java");
-        target.setTest("src/test/java");
+        target.setTargetBase("main", "src/main/java");
+        target.setTargetBase("test", "src/test/java");
         config.setTarget(target);
         TrackingSettings tracking = new TrackingSettings();
         tracking.setFreezeState(freeze);

@@ -44,21 +44,17 @@ class ToolOperationsReferenceLoggingFlagsTest {
 
         String reference = ToolOperationsReference.build(policy, true, true, true, true);
 
-        assertTrue(reference.contains("- **list_files**:"));
-        assertTrue(reference.contains("- **read_file**:"));
-        assertTrue(reference.contains("- **write_file**:"));
-        assertTrue(reference.contains("- **patch_file**:"));
-        assertTrue(reference.contains("- **delete_file**:"));
-        assertTrue(reference.contains("- **list_compiled_files**:"));
-        assertTrue(reference.contains("- **run_script**:"));
-        assertTrue(reference.contains("operation: list_files | base: target | path: com/example | recursive: true"));
-        assertTrue(reference.contains("operation: write_file | base: target | path: compiled/NewType.java"));
-        assertTrue(reference.contains("operation: patch_file | base: target | path: domain/Task.java"));
-        assertFalse(reference.contains("base: target | path: main/java/"));
+        assertTrue(reference.contains("LIST_FILES"));
+        assertTrue(reference.contains("READ_FILE"));
+        assertTrue(reference.contains("WRITE_FILE"));
+        assertTrue(reference.contains("PATCH_FILE"));
+        assertTrue(reference.contains("DELETE_FILE"));
+        assertTrue(reference.contains("LIST_COMPILED_FILES"));
+        assertTrue(reference.contains("RUN_SCRIPT"));
     }
 
     private static FilePolicy policyWithAllBasesEnabled() {
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
+        FileToolsSettings settings = new FileToolsSettings();
         settings.setMain("list,read,write,patch,delete,list_compiled");
         settings.setTest("list,read,write,patch,delete,list_compiled");
         settings.setTarget("list,read,write,patch,delete,list_compiled");

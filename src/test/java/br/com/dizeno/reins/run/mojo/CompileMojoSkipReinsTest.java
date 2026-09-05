@@ -69,7 +69,7 @@ class CompileMojoSkipReinsTest {
         assertDoesNotThrow(() -> mojo.execute());
 
         verify(log).info("[skipReins] reins:compile skipped (reasonCode=SKIP_ENABLED, value=true).");
-        verify(compilationService, never()).processFiles(any(), any(Boolean.class), any(), any(), any());
+        verify(compilationService, never()).processFiles(any(br.com.dizeno.reins.compilation.PreFilterResult.class), any(br.com.dizeno.reins.run.config.ReinsConfig.class), any(Path.class), any(Log.class));
     }
 
     @Test
@@ -77,7 +77,7 @@ class CompileMojoSkipReinsTest {
         setField(mojo, "skipReins", "maybe");
 
         assertThrows(MojoExecutionException.class, () -> mojo.execute());
-        verify(compilationService, never()).processFiles(any(), any(Boolean.class), any(), any(), any());
+        verify(compilationService, never()).processFiles(any(br.com.dizeno.reins.compilation.PreFilterResult.class), any(br.com.dizeno.reins.run.config.ReinsConfig.class), any(Path.class), any(Log.class));
     }
 
     @Test

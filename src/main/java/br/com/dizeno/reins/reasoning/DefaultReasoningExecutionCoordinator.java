@@ -477,7 +477,7 @@ public class DefaultReasoningExecutionCoordinator implements ReasoningService {
     }
 
     /**
-     * Render Pipeline Gemini Message With Failure Logging.
+     * Render Pipeline Message To Model With Failure Logging.
      *
      * @param cycleLog the reasoning cycle log instance
      * @param sequence the sequence
@@ -503,7 +503,7 @@ public class DefaultReasoningExecutionCoordinator implements ReasoningService {
      * @param currentToolResult the current tool result
      * @return the string result
      */
-    public String renderPipelineGeminiMessageWithFailureLogging(ReasoningCycleLog cycleLog,
+    public String renderPipelineMessageToModelWithFailureLogging(ReasoningCycleLog cycleLog,
                                                                  int sequence,
                                                                  String currentPhase,
                                                                  ReasoningPipelinePlan pipelinePlan,
@@ -526,7 +526,7 @@ public class DefaultReasoningExecutionCoordinator implements ReasoningService {
                                                                  boolean currentToolResultAvailable,
                                                                  ToolExecutionResult currentToolResult) {
         try {
-            return inferencePipelineOrchestrator.renderPipelineGeminiMessage(
+            return inferencePipelineOrchestrator.renderPipelineMessageToModel(
                     currentPhase,
                     pipelinePlan,
                     pipelinePhaseIndex,
@@ -691,9 +691,26 @@ public class DefaultReasoningExecutionCoordinator implements ReasoningService {
      * @return the string result
      */
     public static String formatReferenceMutationBlockedMessage(String reasonText) {
-        return "Mutation of artifacts compiled by referenced markdown is not allowed. "
-                + "Use add_reasoning_note on the artifact you attempted to mutate to trigger reprocessing of the owning source, describe the reason for the block, and describe what needs to change. "
-                + reasonText;
+        return formatReferenceMutationBlockedMessage(reasonText, true);
+    }
+
+    /**
+     * Format Reference Mutation Blocked Message.
+     *
+     * @param reasonText the reason text
+     * @param addReasoningNotesEnabled whether reasoning notes are enabled
+     * @return the string result
+     */
+    public static String formatReferenceMutationBlockedMessage(String reasonText, boolean addReasoningNotesEnabled) {
+        if (addReasoningNotesEnabled) {
+            return "Mutation of artifacts compiled by referenced markdown is not allowed. "
+                    + "Use add_reasoning_note on the artifact you attempted to mutate to trigger reprocessing of the owning source, describe the reason for the block, and describe what needs to change. "
+                    + reasonText;
+        } else {
+            return "Mutation of artifacts compiled by referenced markdown is not allowed. "
+                    + "Describe the reason for the block and what needs to change in your final response message. "
+                    + reasonText;
+        }
     }
 
     /**

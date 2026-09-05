@@ -17,99 +17,107 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
- 
+/**
+ * Verifies that write_file on target respects the configured token set.
+ * write is no longer unconditionally granted on target; it must be explicitly
+ * listed in the tooling.target configuration.
+ */
 public class FileUnconditionalTargetWriteTest {
 
     @Test
-    void testWriteFileAlwaysAllowedOnTargetWhenNotConfigured() {
-        
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
-        br.com.dizeno.reins.reasoning.tooling.file.FilePolicy policy = new br.com.dizeno.reins.reasoning.tooling.file.FilePolicy(settings);
-        
-        boolean allowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET);
-        assertTrue(allowed, "write_file on target should be allowed even when mcp.target is not configured");
+    void testWriteFileDeniedOnTargetWhenNotConfigured() {
+        FileToolsSettings settings = new FileToolsSettings();
+        FilePolicy policy = new FilePolicy(settings);
+
+        boolean allowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, FilePolicy.Base.TARGET);
+        assertFalse(allowed, "write_file on target should be denied when fileTools.target is not configured");
     }
 
     @Test
-    void testWriteFileAlwaysAllowedOnTargetWhenEmpty() {
-        
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
+    void testWriteFileDeniedOnTargetWhenEmpty() {
+        FileToolsSettings settings = new FileToolsSettings();
         settings.setTarget("");
-        br.com.dizeno.reins.reasoning.tooling.file.FilePolicy policy = new br.com.dizeno.reins.reasoning.tooling.file.FilePolicy(settings);
-        
-        boolean allowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET);
-        assertTrue(allowed, "write_file on target should be allowed even when mcp.target is blank");
+        FilePolicy policy = new FilePolicy(settings);
+
+        boolean allowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, FilePolicy.Base.TARGET);
+        assertFalse(allowed, "write_file on target should be denied when fileTools.target is blank");
     }
 
     @Test
-    void testWriteFileAlwaysAllowedOnTargetWhenExplicitlyExcluded() {
-        
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
+    void testWriteFileDeniedOnTargetWhenExplicitlyExcluded() {
+        FileToolsSettings settings = new FileToolsSettings();
         settings.setTarget("list,read");
-        br.com.dizeno.reins.reasoning.tooling.file.FilePolicy policy = new br.com.dizeno.reins.reasoning.tooling.file.FilePolicy(settings);
-        
-        boolean allowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET);
-        assertTrue(allowed, "write_file on target should be allowed even when write is not in mcp.target config");
+        FilePolicy policy = new FilePolicy(settings);
+
+        boolean allowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, FilePolicy.Base.TARGET);
+        assertFalse(allowed, "write_file on target should be denied when write is not in fileTools.target config");
     }
 
     @Test
-    void testWriteFileAlwaysAllowedOnTargetEvenWhenPatchDenied() {
-        
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
-        settings.setTarget("read,list");
-        br.com.dizeno.reins.reasoning.tooling.file.FilePolicy policy = new br.com.dizeno.reins.reasoning.tooling.file.FilePolicy(settings);
-        
-        boolean writeAllowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET);
-        boolean patchAllowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.PATCH_FILE, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET);
-        
-        assertTrue(writeAllowed, "write_file on target should always be allowed");
-        assertFalse(patchAllowed, "patch_file on target should be denied when not configured");
+    void testWriteFileDeniedButPatchAllowedOnTarget() {
+        FileToolsSettings settings = new FileToolsSettings();
+        settings.setTarget("read,patch");
+        FilePolicy policy = new FilePolicy(settings);
+
+        boolean writeAllowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, FilePolicy.Base.TARGET);
+        boolean patchAllowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.PATCH_FILE, FilePolicy.Base.TARGET);
+
+        assertFalse(writeAllowed, "write_file on target should be denied when write is not in config");
+        assertTrue(patchAllowed, "patch_file on target should be allowed when patch is in config");
     }
 
     @Test
     void testOtherOperationsOnTargetRespectConfig() {
-        
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
+        FileToolsSettings settings = new FileToolsSettings();
         settings.setTarget("read");
-        br.com.dizeno.reins.reasoning.tooling.file.FilePolicy policy = new br.com.dizeno.reins.reasoning.tooling.file.FilePolicy(settings);
-        
-        boolean readAllowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.READ_FILE, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET);
-        boolean listAllowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.LIST_FILES, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET);
-        boolean writeAllowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET);
-        boolean patchAllowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.PATCH_FILE, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET);
-        
+        FilePolicy policy = new FilePolicy(settings);
+
+        boolean readAllowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.READ_FILE, FilePolicy.Base.TARGET);
+        boolean listAllowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.LIST_FILES, FilePolicy.Base.TARGET);
+        boolean writeAllowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, FilePolicy.Base.TARGET);
+        boolean patchAllowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.PATCH_FILE, FilePolicy.Base.TARGET);
+
         assertTrue(readAllowed, "read_file should be allowed when in config");
         assertFalse(listAllowed, "list_files should be denied when not in config");
-        assertTrue(writeAllowed, "write_file should ALWAYS be allowed on target");
+        assertFalse(writeAllowed, "write_file should be denied when not in config");
         assertFalse(patchAllowed, "patch_file should be denied when not in config");
     }
 
     @Test
-    void testWriteFileIncludedInEnabledBasesForTarget() {
-        
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
+    void testWriteFileNotInEnabledBasesForTargetWhenNotConfigured() {
+        FileToolsSettings settings = new FileToolsSettings();
         settings.setTarget("list");
-        br.com.dizeno.reins.reasoning.tooling.file.FilePolicy policy = new br.com.dizeno.reins.reasoning.tooling.file.FilePolicy(settings);
-        
+        FilePolicy policy = new FilePolicy(settings);
+
         var enabledBases = policy.getEnabledBasesForOperation(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE);
-        assertTrue(enabledBases.contains(br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET),
-            "target should be in enabled bases for write_file even when write is not in config");
+        assertFalse(enabledBases.contains(FilePolicy.Base.TARGET),
+            "target should NOT be in enabled bases for write_file when write is not in config");
     }
 
     @Test
-    void testFullConfigWithTargetWriteGuarantee() {
-        McpFileBaseOpsSettings settings = new McpFileBaseOpsSettings();
+    void testWriteFileAllowedOnTargetWhenExplicitlyConfigured() {
+        FileToolsSettings settings = new FileToolsSettings();
+        settings.setTarget("list,read,write");
+        FilePolicy policy = new FilePolicy(settings);
+
+        boolean allowed = policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, FilePolicy.Base.TARGET);
+        assertTrue(allowed, "write_file on target should be allowed when write is explicitly in config");
+    }
+
+    @Test
+    void testFullConfigWriteRespectedPerBase() {
+        FileToolsSettings settings = new FileToolsSettings();
         settings.setMain("read");
         settings.setTest("read,write");
-        settings.setTarget("read");  
-        br.com.dizeno.reins.reasoning.tooling.file.FilePolicy policy = new br.com.dizeno.reins.reasoning.tooling.file.FilePolicy(settings);
-        
-        assertFalse(policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.MAIN),
+        settings.setTarget("read");
+        FilePolicy policy = new FilePolicy(settings);
+
+        assertFalse(policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, FilePolicy.Base.MAIN),
             "write_file denied on main (not configured)");
-        assertTrue(policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TEST),
+        assertTrue(policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, FilePolicy.Base.TEST),
             "write_file allowed on test (explicitly configured)");
-        assertTrue(policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, br.com.dizeno.reins.reasoning.tooling.file.FilePolicy.Base.TARGET),
-            "write_file allowed on target (unconditional guarantee)");
+        assertFalse(policy.isOperationAllowed(br.com.dizeno.reins.reasoning.tooling.ToolExecutionType.WRITE_FILE, FilePolicy.Base.TARGET),
+            "write_file denied on target (write not in config, only read)");
     }
 
 }

@@ -90,7 +90,6 @@ class CompilationServiceTouchSkippedOutputsTest {
         PreFilterResult preFilterResult = new PreFilterResult(
                 List.of(sourceFile.toFile()),
                 List.of(entry),
-                false,
                 List.of()
         );
 
@@ -102,11 +101,12 @@ class CompilationServiceTouchSkippedOutputsTest {
         assertTrue(currentMtime > pastTimeMillis, "Output file should have its modification time updated");
 
         
+        // Verify tracking record is NOT updated for skipped source
         SourceTrackingRecord updatedRecord = trackingStore.load(projectRoot, record.getSourcePath()).orElse(null);
         assertNotNull(updatedRecord);
         FileTrackingDetails updatedDetails = updatedRecord.getCompiledFiles().get("target:com/example/Compiled.java");
         assertNotNull(updatedDetails);
-        assertEquals(currentMtime, updatedDetails.getModificationTime());
+        assertEquals(pastTimeMillis, updatedDetails.getModificationTime(), "Skipped source should not update tracking file modification time");
     }
 
     @Test
@@ -147,7 +147,7 @@ class CompilationServiceTouchSkippedOutputsTest {
         trackingStore.save(projectRoot, record.getSourcePath(), record);
 
         
-        service.processFiles(List.of(sourceFile.toFile()), false, config, projectRoot, log);
+        service.processFiles(List.of(sourceFile.toFile()), config, projectRoot, log);
 
         
         long currentMtime = Files.getLastModifiedTime(outputFile).toMillis();
@@ -158,8 +158,8 @@ class CompilationServiceTouchSkippedOutputsTest {
         assertNotNull(updatedRecord);
         FileTrackingDetails updatedDetails = updatedRecord.getCompiledFiles().get("target:com/example/Compiled.java");
         assertNotNull(updatedDetails);
-        assertEquals(currentMtime, updatedDetails.getModificationTime());
-        assertEquals("skipped", updatedRecord.getLastStatus());
+        assertEquals(pastTimeMillis, updatedDetails.getModificationTime(), "Skipped source should not update tracking file modification time");
+        assertEquals("no-change", updatedRecord.getLastStatus(), "Source compilation with no output changes should update tracking status to no-change");
     }
 
     @Test
@@ -203,7 +203,6 @@ class CompilationServiceTouchSkippedOutputsTest {
         PreFilterResult preFilterResult = new PreFilterResult(
                 List.of(sourceFile.toFile()),
                 List.of(entry),
-                false,
                 List.of()
         );
 
@@ -263,7 +262,6 @@ class CompilationServiceTouchSkippedOutputsTest {
         PreFilterResult preFilterResult = new PreFilterResult(
                 List.of(sourceFile.toFile()),
                 List.of(entry),
-                false,
                 List.of()
         );
 
@@ -299,8 +297,7 @@ class CompilationServiceTouchSkippedOutputsTest {
                 new MarkdownDependencyGraphBuilder(),
                 new ProcessingOrderResolver(),
                 reasoningService,
-                new ProjectContextService(),
-                null);
+                new ProjectContextService());
     }
 
     private ReasoningResult successResult() {
@@ -322,7 +319,7 @@ class CompilationServiceTouchSkippedOutputsTest {
 
     private ReinsConfig baseConfig() {
         ReinsConfig config = new ReinsConfig();
-        config.setScanRoots(List.of(projectRoot.resolve("src/main/nl").toFile()));
+        config.setSourceBase("main", projectRoot.resolve("src/main/nl").toFile());
         config.setIncludePattern("**/*.md");
         config.setFailOnError(false);
 
@@ -331,9 +328,8 @@ class CompilationServiceTouchSkippedOutputsTest {
         config.setLog(logSettings);
 
         TargetSettings target = new TargetSettings();
-        target.setRoot(projectRoot.toFile());
-        target.setMain("src/main/java");
-        target.setTest("src/test/java");
+        target.setTargetBase("main", "src/main/java");
+        target.setTargetBase("test", "src/test/java");
         config.setTarget(target);
 
         return config;

@@ -11,6 +11,9 @@
 
 package br.com.dizeno.reins.reasoning.scripting;
 
+import br.com.dizeno.reins.run.config.ReinsConfig;
+import br.com.dizeno.reins.run.config.settings.*;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -33,6 +36,7 @@ public final class ReasoningScriptViews {
     public static final class SourceView {
         private final String path;
         private final String absolutePath;
+        private final String qualifiedPath;
         private final String content;
         private final String hash;
         private final String scope;
@@ -50,8 +54,25 @@ public final class ReasoningScriptViews {
          */
         public SourceView(String path, String absolutePath, String content,
                           String hash, String scope, List<CodegenBlockView> codegenBlocks) {
+            this(path, absolutePath, scope + ":" + path, content, hash, scope, codegenBlocks);
+        }
+
+        /**
+         * Constructs a new instance of {@link SourceView} with explicit qualifiedPath.
+         *
+         * @param path the file or directory path
+         * @param absolutePath the absolute path
+         * @param qualifiedPath the base-qualified path
+         * @param content the content
+         * @param hash the hash
+         * @param scope the scope
+         * @param codegenBlocks the codegen blocks
+         */
+        public SourceView(String path, String absolutePath, String qualifiedPath, String content,
+                          String hash, String scope, List<CodegenBlockView> codegenBlocks) {
             this.path = path;
             this.absolutePath = absolutePath;
+            this.qualifiedPath = qualifiedPath != null ? qualifiedPath : (scope + ":" + path);
             this.content = content;
             this.hash = hash;
             this.scope = scope;
@@ -72,6 +93,12 @@ public final class ReasoningScriptViews {
          * @return the string result
          */
         public String getAbsolutePath() { return absolutePath; }
+        /**
+         * Gets the qualified path.
+         *
+         * @return the string result
+         */
+        public String getQualifiedPath() { return qualifiedPath; }
         /**
          * Gets the content.
          *
@@ -287,6 +314,44 @@ public final class ReasoningScriptViews {
          */
         public List<String> getNotes() { return notes; }
 
+        /**
+         * Formats notes list as markdown bullet points or returns "- none".
+         *
+         * @return formatted string
+         */
+        public String getNotesOrNone() {
+            if (notes == null || notes.isEmpty()) {
+                return "- none";
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < notes.size(); i++) {
+                sb.append("- ").append(notes.get(i));
+                if (i < notes.size() - 1) {
+                    sb.append("\n");
+                }
+            }
+            return sb.toString();
+        }
+
+        /**
+         * Formats compiled paths list as markdown bullet points or returns "- none".
+         *
+         * @return formatted string
+         */
+        public String getCompiledPathsOrNone() {
+            if (compiledPaths == null || compiledPaths.isEmpty()) {
+                return "- none";
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < compiledPaths.size(); i++) {
+                sb.append("- ").append(compiledPaths.get(i));
+                if (i < compiledPaths.size() - 1) {
+                    sb.append("\n");
+                }
+            }
+            return sb.toString();
+        }
+
         private static String stripKnownBasePrefix(String path) {
             if (path == null || path.isBlank()) {
                 return path;
@@ -315,6 +380,36 @@ public final class ReasoningScriptViews {
         }
     }
 
+    public static final class CompiledSourceGroupView {
+        private final String sourceCanonicalPath;
+        private final String sourceSimpleName;
+        private final List<String> compiledPaths;
+
+        public CompiledSourceGroupView(String sourceCanonicalPath, String sourceSimpleName, List<String> compiledPaths) {
+            this.sourceCanonicalPath = sourceCanonicalPath;
+            this.sourceSimpleName = sourceSimpleName;
+            this.compiledPaths = compiledPaths != null ? Collections.unmodifiableList(compiledPaths) : Collections.emptyList();
+        }
+
+        public String getSourceCanonicalPath() { return sourceCanonicalPath; }
+        public String getSourceSimpleName() { return sourceSimpleName; }
+        public List<String> getCompiledPaths() { return compiledPaths; }
+
+        public String getCompiledPathsOrNone() {
+            if (compiledPaths == null || compiledPaths.isEmpty()) {
+                return "- none";
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < compiledPaths.size(); i++) {
+                sb.append("- ").append(compiledPaths.get(i));
+                if (i < compiledPaths.size() - 1) {
+                    sb.append("\n");
+                }
+            }
+            return sb.toString();
+        }
+    }
+
     /**
      * InferenceStateView is part of the dynamic script evaluation using Freemarker templates and context injection in the reins architecture.
      * Acts as a component managing inference state view.
@@ -324,6 +419,7 @@ public final class ReasoningScriptViews {
         private final List<TurnView> conversationHistory;
         private final List<String> inspectedFiles;
         private final List<String> compiledFiles;
+        private final List<CompiledSourceGroupView> compiledSourceGroups;
         private final List<ToolOpView> toolOperations;
 
         /**
@@ -340,6 +436,25 @@ public final class ReasoningScriptViews {
                                   List<String> inspectedFiles,
                                   List<String> compiledFiles,
                                   List<ToolOpView> toolOperations) {
+            this(context, conversationHistory, inspectedFiles, compiledFiles, Collections.emptyList(), toolOperations);
+        }
+
+        /**
+         * Constructs a new instance of {@link InferenceStateView} with compiledSourceGroups.
+         *
+         * @param context the context
+         * @param conversationHistory the conversation history
+         * @param inspectedFiles the inspected files
+         * @param compiledFiles the compiled files
+         * @param compiledSourceGroups the compiled source groups
+         * @param toolOperations the tool operations
+         */
+        public InferenceStateView(String context,
+                                  List<TurnView> conversationHistory,
+                                  List<String> inspectedFiles,
+                                  List<String> compiledFiles,
+                                  List<CompiledSourceGroupView> compiledSourceGroups,
+                                  List<ToolOpView> toolOperations) {
             this.context = context;
             this.conversationHistory = conversationHistory != null
                     ? Collections.unmodifiableList(conversationHistory)
@@ -349,6 +464,9 @@ public final class ReasoningScriptViews {
                     : Collections.emptyList();
             this.compiledFiles = compiledFiles != null
                     ? Collections.unmodifiableList(compiledFiles)
+                    : Collections.emptyList();
+            this.compiledSourceGroups = compiledSourceGroups != null
+                    ? Collections.unmodifiableList(compiledSourceGroups)
                     : Collections.emptyList();
             this.toolOperations = toolOperations != null
                     ? Collections.unmodifiableList(toolOperations)
@@ -380,11 +498,54 @@ public final class ReasoningScriptViews {
          */
         public List<String> getCompiledFiles() { return compiledFiles; }
         /**
+         * Gets the compiled source groups.
+         *
+         * @return the collection of elements
+         */
+        public List<CompiledSourceGroupView> getCompiledSourceGroups() { return compiledSourceGroups; }
+        /**
          * Gets the tool operations.
          *
          * @return the collection of elements
          */
         public List<ToolOpView> getToolOperations() { return toolOperations; }
+
+        /**
+         * Formats inspected files list as markdown bullet points or returns "- none".
+         *
+         * @return formatted string
+         */
+        public String getInspectedFilesOrNone() {
+            if (inspectedFiles == null || inspectedFiles.isEmpty()) {
+                return "- none";
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < inspectedFiles.size(); i++) {
+                sb.append("- ").append(inspectedFiles.get(i));
+                if (i < inspectedFiles.size() - 1) {
+                    sb.append("\n");
+                }
+            }
+            return sb.toString();
+        }
+
+        /**
+         * Checks if conversation history contains turns.
+         *
+         * @return true if history is non-empty
+         */
+        public boolean isHasHistory() {
+            return conversationHistory != null && !conversationHistory.isEmpty();
+        }
+
+        /**
+         * Checks if this is the first turn in the conversation.
+         *
+         * @return true if no conversation history exists
+         */
+        public boolean isFirstTurn() {
+            return !isHasHistory();
+        }
     }
 
     /**
@@ -733,6 +894,25 @@ public final class ReasoningScriptViews {
          * @return true if successful or matching, false otherwise
          */
         public boolean isCurrentToolResultAvailable() { return currentToolResultAvailable; }
+
+        /**
+         * Checks if this is the first message in the pipeline phase before any directives or tool results.
+         *
+         * @return true if first message
+         */
+        public boolean isFirstMessage() {
+            return (lastDirectiveIntent == null || lastDirectiveIntent.isBlank())
+                    && !currentToolResultAvailable;
+        }
+
+        /**
+         * Checks if current phase is the first phase (ordinal 0).
+         *
+         * @return true if first phase
+         */
+        public boolean isFirstPhase() {
+            return currentPhaseOrdinal == 0;
+        }
     }
 
     /**
@@ -740,114 +920,138 @@ public final class ReasoningScriptViews {
      * Acts as a component managing config view.
      */
     public static final class ConfigView {
-        private final String model;
-        private final Integer maxTurns;
-        private final boolean thinkingOutLoud;
-        private final boolean projectCycle;
-        private final boolean failOnError;
-        private final boolean verbose;
-        private final boolean dryRun;
-        private final boolean addReasoningNotes;
-        private final String scriptDir;
+        private final ReinsConfig raw;
 
         /**
-         * Constructs a new instance of {@link ConfigView}.
+         * Constructs a new instance of {@link ConfigView} wrapping {@link ReinsConfig}.
          *
-         * @param model the model name string
-         * @param maxTurns the maximum turn limit for the reasoning cycle
-         * @param thinkingOutLoud the thinking out loud
-         * @param projectCycle the project cycle
-         * @param failOnError the fail on error
-         * @param verbose the verbose
-         * @param dryRun the dry run
-         * @param scriptDir the script dir
+         * @param config the underlying ReinsConfig instance
          */
-        public ConfigView(String model, Integer maxTurns, boolean thinkingOutLoud, boolean projectCycle,
-                          boolean failOnError, boolean verbose, boolean dryRun, String scriptDir) {
-            this(model, maxTurns, thinkingOutLoud, projectCycle, failOnError, verbose, dryRun, false, scriptDir);
+        public ConfigView(ReinsConfig config) {
+            this.raw = config != null ? config : new ReinsConfig();
         }
 
         /**
-         * Constructs a new instance of {@link ConfigView}.
+         * Gets the raw underlying {@link ReinsConfig} instance.
          *
-         * @param model the model name string
-         * @param maxTurns the maximum turn limit for the reasoning cycle
-         * @param thinkingOutLoud the thinking out loud
-         * @param projectCycle the project cycle
-         * @param failOnError the fail on error
-         * @param verbose the verbose
-         * @param dryRun the dry run
-         * @param addReasoningNotes the add inference notes
-         * @param scriptDir the script dir
+         * @return the ReinsConfig instance
          */
-        public ConfigView(String model, Integer maxTurns, boolean thinkingOutLoud, boolean projectCycle,
-                          boolean failOnError, boolean verbose, boolean dryRun, boolean addReasoningNotes,
-                          String scriptDir) {
-            this.model = model;
-            this.maxTurns = maxTurns;
-            this.thinkingOutLoud = thinkingOutLoud;
-            this.projectCycle = projectCycle;
-            this.failOnError = failOnError;
-            this.verbose = verbose;
-            this.dryRun = dryRun;
-            this.addReasoningNotes = addReasoningNotes;
-            this.scriptDir = scriptDir;
-        }
+        public ReinsConfig getRaw() { return raw; }
+
+        /**
+         * Gets the raw underlying {@link ReinsConfig} instance.
+         *
+         * @return the ReinsConfig instance
+         */
+        public ReinsConfig getReinsConfig() { return raw; }
 
         /**
          * Gets the model.
          *
          * @return the string result
          */
-        public String getModel() { return model; }
+        public String getModel() {
+            String resolved = raw.resolveModel();
+            return resolved != null ? resolved : "unknown";
+        }
+
         /**
          * Gets the max turns.
          *
          * @return the numeric value
          */
-        public Integer getMaxTurns() { return maxTurns; }
+        public Integer getMaxTurns() {
+            var activeSettings = raw.resolveActiveModelSettings();
+            if (activeSettings != null && activeSettings.resolveMaximumTurns() > 0) {
+                return activeSettings.resolveMaximumTurns();
+            }
+            return raw.getReasoning() != null ? raw.getReasoning().getMaxTurns() : null;
+        }
+
         /**
          * Checks if the component is thinking out loud.
          *
          * @return true if successful or matching, false otherwise
          */
-        public boolean isThinkingOutLoud() { return thinkingOutLoud; }
-        /**
-         * Checks if the component is project cycle.
-         *
-         * @return true if successful or matching, false otherwise
-         */
-        public boolean isProjectCycle() { return projectCycle; }
+        public boolean isThinkingOutLoud() {
+            return raw.getReasoning() != null && raw.getReasoning().isThinkingOutLoud();
+        }
+
+
         /**
          * Checks if the component is fail on error.
          *
          * @return true if successful or matching, false otherwise
          */
-        public boolean isFailOnError() { return failOnError; }
+        public boolean isFailOnError() { return raw.isFailOnError(); }
+
         /**
          * Checks if the component is verbose.
          *
          * @return true if successful or matching, false otherwise
          */
-        public boolean isVerbose() { return verbose; }
+        public boolean isVerbose() { return raw.isVerbose(); }
+
         /**
          * Checks if the component is dry run.
          *
          * @return true if successful or matching, false otherwise
          */
-        public boolean isDryRun() { return dryRun; }
+        public boolean isDryRun() { return raw.isDryRun(); }
+
         /**
-         * Checks if the component is add inference notes.
+         * Checks if the component is add reasoning notes.
          *
          * @return true if successful or matching, false otherwise
          */
-        public boolean isAddReasoningNotes() { return addReasoningNotes; }
+        public boolean isAddReasoningNotes() {
+            return raw.getTooling() != null && raw.getTooling().isAddReasoningNotes();
+        }
+
+        /**
+         * Gets the summarize cycle turns.
+         *
+         * @return the numeric value
+         */
+        public int getSummarizeCycleTurns() {
+            return raw.getReasoning() != null ? raw.getReasoning().getSummarizeCycleTurns() : 0;
+        }
+
         /**
          * Gets the script dir.
          *
          * @return the string result
          */
-        public String getScriptDir() { return scriptDir; }
+        public String getScriptDir() {
+            return raw.getReasoning() != null ? raw.getScriptsPath() : null;
+        }
+
+        // Delegating getters reflecting ReinsConfig settings & nested beans
+        public GeminiSettings getGemini() { return raw.getGemini(); }
+        public OllamaSettings getOllama() { return raw.getOllama(); }
+        public OpenAiSettings getOpenai() { return raw.getOpenai(); }
+        public String getProvider() { return raw.getProvider(); }
+        public java.util.Map<String, java.io.File> getSourceBases() { return raw.getSourceBases(); }
+        public boolean isSkipTest() { return raw.isSkipTest(); }
+        public String getIncludePattern() { return raw.getIncludePattern(); }
+        public boolean isValidateAll() { return raw.isValidateAll(); }
+        public boolean isFreshCompilation() { return raw.isFreshCompilation(); }
+        public TargetSettings getTarget() { return raw.getTarget(); }
+        public ReasoningSettings getReasoning() { return raw.getReasoning(); }
+        public RecompileOnSettings getRecompileOn() { return raw.getRecompileOn(); }
+        public EagerlyProvideSettings getEagerlyProvide() { return raw.getEagerlyProvide(); }
+        public LogSettings getLog() { return raw.getLog(); }
+        public LoggingSettings getLogging() { return raw.getLogging(); }
+        public ModelSettings getModelSettings() { return raw.getModel(); }
+        public BuildSettings getBuild() { return raw.getBuild(); }
+        public ToolingSettings getTooling() { return raw.getTooling(); }
+        public FileToolsSettings getFileTools() { return raw.getFileTools(); }
+        public ContextSettings getContext() { return raw.getContext(); }
+        public TrackingSettings getTracking() { return raw.getTracking(); }
+        public String getSource() { return raw.getSource(); }
+        public String getNote() { return raw.getNote(); }
+        public boolean isExplicitSourceMode() { return raw.isExplicitSourceMode(); }
+        public String getScriptsPath() { return raw.getScriptsPath(); }
     }
 
     /**
@@ -860,27 +1064,52 @@ public final class ReasoningScriptViews {
         private final List<String> writeFilesBases;
         private final List<String> patchFilesBases;
         private final List<String> deleteFilesBases;
+        private final List<String> appendFilesBases;
+        private final List<String> prependFilesBases;
+        private final List<String> moveFilesBases;
+        private final List<String> copyFilesBases;
         private final List<String> listCompiledFilesBases;
         private final boolean scriptRunnerEnabled;
         private final String toolOpsReference;
 
-        /**
-         * Constructs a new instance of {@link PolicyView}.
-         *
-         * @param listFilesBases the list files bases
-         * @param readFilesBases the read files bases
-         * @param writeFilesBases the write files bases
-         * @param patchFilesBases the patch files bases
-         * @param deleteFilesBases the delete files bases
-         * @param listCompiledFilesBases the list compiled files bases
-         * @param scriptRunnerEnabled the script runner enabled
-         * @param toolOpsReference the tool ops reference
-         */
         public PolicyView(List<String> listFilesBases,
                           List<String> readFilesBases,
                           List<String> writeFilesBases,
                           List<String> patchFilesBases,
                           List<String> deleteFilesBases,
+                          List<String> listCompiledFilesBases,
+                          boolean scriptRunnerEnabled,
+                          String toolOpsReference) {
+            this(listFilesBases, readFilesBases, writeFilesBases, patchFilesBases, deleteFilesBases,
+                 writeFilesBases, writeFilesBases, writeFilesBases, writeFilesBases, listCompiledFilesBases,
+                 scriptRunnerEnabled, toolOpsReference);
+        }
+
+        public PolicyView(List<String> listFilesBases,
+                          List<String> readFilesBases,
+                          List<String> writeFilesBases,
+                          List<String> patchFilesBases,
+                          List<String> deleteFilesBases,
+                          List<String> appendFilesBases,
+                          List<String> prependFilesBases,
+                          List<String> moveFilesBases,
+                          List<String> listCompiledFilesBases,
+                          boolean scriptRunnerEnabled,
+                          String toolOpsReference) {
+            this(listFilesBases, readFilesBases, writeFilesBases, patchFilesBases, deleteFilesBases,
+                 appendFilesBases, prependFilesBases, moveFilesBases, writeFilesBases, listCompiledFilesBases,
+                 scriptRunnerEnabled, toolOpsReference);
+        }
+
+        public PolicyView(List<String> listFilesBases,
+                          List<String> readFilesBases,
+                          List<String> writeFilesBases,
+                          List<String> patchFilesBases,
+                          List<String> deleteFilesBases,
+                          List<String> appendFilesBases,
+                          List<String> prependFilesBases,
+                          List<String> moveFilesBases,
+                          List<String> copyFilesBases,
                           List<String> listCompiledFilesBases,
                           boolean scriptRunnerEnabled,
                           String toolOpsReference) {
@@ -894,42 +1123,29 @@ public final class ReasoningScriptViews {
                     ? Collections.unmodifiableList(patchFilesBases) : Collections.emptyList();
             this.deleteFilesBases = deleteFilesBases != null
                     ? Collections.unmodifiableList(deleteFilesBases) : Collections.emptyList();
+            this.appendFilesBases = appendFilesBases != null
+                    ? Collections.unmodifiableList(appendFilesBases) : Collections.emptyList();
+            this.prependFilesBases = prependFilesBases != null
+                    ? Collections.unmodifiableList(prependFilesBases) : Collections.emptyList();
+            this.moveFilesBases = moveFilesBases != null
+                    ? Collections.unmodifiableList(moveFilesBases) : Collections.emptyList();
+            this.copyFilesBases = copyFilesBases != null
+                    ? Collections.unmodifiableList(copyFilesBases) : Collections.emptyList();
             this.listCompiledFilesBases = listCompiledFilesBases != null
                     ? Collections.unmodifiableList(listCompiledFilesBases) : Collections.emptyList();
             this.scriptRunnerEnabled = scriptRunnerEnabled;
             this.toolOpsReference = toolOpsReference != null ? toolOpsReference : "";
         }
 
-        /**
-         * Gets the list files bases.
-         *
-         * @return the string result
-         */
         public List<String> getListFilesBases() { return listFilesBases; }
-        /**
-         * Gets the read files bases.
-         *
-         * @return the string result
-         */
         public List<String> getReadFilesBases() { return readFilesBases; }
-        /**
-         * Gets the write files bases.
-         *
-         * @return the string result
-         */
         public List<String> getWriteFilesBases() { return writeFilesBases; }
-        /**
-         * Gets the patch files bases.
-         *
-         * @return the string result
-         */
         public List<String> getPatchFilesBases() { return patchFilesBases; }
-        /**
-         * Gets the delete files bases.
-         *
-         * @return the string result
-         */
         public List<String> getDeleteFilesBases() { return deleteFilesBases; }
+        public List<String> getAppendFilesBases() { return appendFilesBases; }
+        public List<String> getPrependFilesBases() { return prependFilesBases; }
+        public List<String> getMoveFilesBases() { return moveFilesBases; }
+        public List<String> getCopyFilesBases() { return copyFilesBases; }
         /**
          * Gets the list compiled files bases.
          *
@@ -948,6 +1164,87 @@ public final class ReasoningScriptViews {
          * @return the string result
          */
         public String getToolOpsReference() { return toolOpsReference; }
+
+        /**
+         * Checks if list files base group is enabled.
+         *
+         * @return true if list files bases are configured
+         */
+        public boolean isHasListFiles() {
+            return listFilesBases != null && !listFilesBases.isEmpty();
+        }
+
+        /**
+         * Checks if read files base group is enabled.
+         *
+         * @return true if read files bases are configured
+         */
+        public boolean isHasReadFiles() {
+            return readFilesBases != null && !readFilesBases.isEmpty();
+        }
+
+        /**
+         * Checks if write files base group is enabled.
+         *
+         * @return true if write files bases are configured
+         */
+        public boolean isHasWriteFiles() {
+            return writeFilesBases != null && !writeFilesBases.isEmpty();
+        }
+
+        /**
+         * Checks if patch files base group is enabled.
+         *
+         * @return true if patch files bases are configured
+         */
+        public boolean isHasPatchFiles() {
+            return patchFilesBases != null && !patchFilesBases.isEmpty();
+        }
+
+        /**
+         * Checks if delete files base group is enabled.
+         *
+         * @return true if delete files bases are configured
+         */
+        public boolean isHasDeleteFiles() {
+            return deleteFilesBases != null && !deleteFilesBases.isEmpty();
+        }
+
+        /**
+         * Checks if list compiled files base group is enabled.
+         *
+         * @return true if list compiled files bases are configured
+         */
+        public boolean isHasListCompiledFiles() {
+            return listCompiledFilesBases != null && !listCompiledFilesBases.isEmpty();
+        }
+
+        /**
+         * Checks if any read or list tool group is enabled.
+         *
+         * @return true if read/list operations active
+         */
+        public boolean isHasAnyReadOrList() {
+            return isHasListFiles() || isHasReadFiles() || isHasListCompiledFiles();
+        }
+
+        /**
+         * Checks if any mutation tool group is enabled (write, patch, delete).
+         *
+         * @return true if mutation operations active
+         */
+        public boolean isHasAnyMutation() {
+            return isHasWriteFiles() || isHasPatchFiles() || isHasDeleteFiles();
+        }
+
+        /**
+         * Checks if any tool group or script runner is enabled.
+         *
+         * @return true if any tool operation group active
+         */
+        public boolean isHasAnyToolEnabled() {
+            return isHasAnyReadOrList() || isHasAnyMutation() || scriptRunnerEnabled;
+        }
     }
 
     /**
@@ -1229,5 +1526,41 @@ public final class ReasoningScriptViews {
          * @return the string result
          */
         public String getReason() { return reason; }
+    }
+
+    public static SourceView emptySource() {
+        return new SourceView("", "", "", "", "", "", Collections.emptyList());
+    }
+
+    public static FileBasesView emptyFileBases() {
+        return new FileBasesView("", "", "", "");
+    }
+
+    public static TrackingView emptyTracking() {
+        return new TrackingView("", Collections.emptyList(), "", "", Collections.emptyList());
+    }
+
+    public static InferenceStateView emptyInferenceState() {
+        return new InferenceStateView("", Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+    }
+
+    public static ConfigView emptyConfig() {
+        return new ConfigView(new ReinsConfig());
+    }
+
+    public static CycleView emptyCycle() {
+        return new CycleView("", 0, 0, "", "");
+    }
+
+    public static PolicyView emptyPolicy() {
+        return new PolicyView(Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), false, "");
+    }
+
+    public static PipelineView emptyPipeline() {
+        return new PipelineView("", 0, 0, Collections.emptyList(), "COMPILE", "", "", "", "", false);
+    }
+
+    public static ToolResultView emptyToolResult() {
+        return new ToolResultView("", "", "", "", "", "", "", 0, false, false, "", "", "", false, Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), "");
     }
 }

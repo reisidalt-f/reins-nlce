@@ -67,12 +67,27 @@ public class TurnCompletionPhase implements ReasoningPhase {
                     directive);
             int nextPhaseIndex = coordinator.inferencePipelineExecutor.advancePhaseIndex(context.getPipelinePlan(), context.getPipelinePhaseIndex());
             if (pipelineOutcome == null && nextPhaseIndex >= 0) {
+                int summarizeTurns = context.getConfig() != null && context.getConfig().getReasoning() != null
+                        ? context.getConfig().getReasoning().getSummarizeCycleTurns()
+                        : 1;
+                boolean isSummaryTurn = summarizeTurns > 0 && context.getLogicalTurn() % summarizeTurns == 0;
+                String summaryCandidate = context.getLatestConversationSummary();
+                if (summaryCandidate == null || summaryCandidate.isBlank()) {
+                    if (directive.getContentType() == ResponseDirective.ContentType.CONVERSATION_SUMMARY) {
+                        summaryCandidate = inbound.getPayload();
+                    }
+                }
+                if (isSummaryTurn && summaryCandidate != null && !summaryCandidate.isBlank()) {
+                    compressHistoryWithSummary(context, summaryCandidate);
+                    context.setLatestConversationSummary(null);
+                }
+
                 context.setPipelinePhaseIndex(nextPhaseIndex);
                 String currentPipelinePhase = coordinator.inferencePipelineExecutor.currentPhaseName(context.getPipelinePlan(), nextPhaseIndex);
                 context.setCurrentPipelinePhase(currentPipelinePhase);
                 coordinator.cycleStateManager.emitLifecycleMessage(context.getCycleLog(), "pipeline-phase-transition: " + currentPipelinePhase);
 
-                String nextMessage = coordinator.renderPipelineGeminiMessageWithFailureLogging(
+                String nextMessage = coordinator.renderPipelineMessageToModelWithFailureLogging(
                         context.getCycleLog(),
                         inbound.getSequence(),
                         currentPipelinePhase,
@@ -83,7 +98,7 @@ public class TurnCompletionPhase implements ReasoningPhase {
                         context.getConfig(),
                         context.getCycle(),
                         context.getToolPermission(),
-                        context.getScriptRunnerConfig().isEnabled(),
+                        context.isScriptRunnerEnabled(),
                         context.getFirstTurnReferenceTree(),
                         new ArrayList<>(context.getInspectedPaths()),
                         new ArrayList<>(context.getWrittenPaths()),
@@ -142,10 +157,91 @@ public class TurnCompletionPhase implements ReasoningPhase {
             return null; 
         }
 
+        if (directive.getIntent() == ResponseDirective.Intent.GOTO_PHASE) {
+            String targetPhase = directive.getTargetPhase();
+            int targetIndex = coordinator.inferencePipelineExecutor.findPhaseIndex(context.getPipelinePlan(), targetPhase);
+            String currentPipelinePhase = targetIndex >= 0
+                    ? coordinator.inferencePipelineExecutor.currentPhaseName(context.getPipelinePlan(), targetIndex)
+                    : (targetPhase != null && !targetPhase.isBlank() ? targetPhase.trim() : context.getCurrentPipelinePhase());
+
+            if (targetIndex >= 0) {
+                context.setPipelinePhaseIndex(targetIndex);
+            }
+            context.setCurrentPipelinePhase(currentPipelinePhase);
+            coordinator.cycleStateManager.emitLifecycleMessage(context.getCycleLog(), "pipeline-phase-goto: " + currentPipelinePhase);
+
+            String nextMessage = coordinator.renderPipelineMessageToModelWithFailureLogging(
+                    context.getCycleLog(),
+                    inbound.getSequence(),
+                    currentPipelinePhase,
+                    context.getPipelinePlan(),
+                    context.getPipelinePhaseIndex(),
+                    context.getNextMessage(),
+                    context.getRequest(),
+                    context.getConfig(),
+                    context.getCycle(),
+                    context.getToolPermission(),
+                    context.isScriptRunnerEnabled(),
+                    context.getFirstTurnReferenceTree(),
+                    new ArrayList<>(context.getInspectedPaths()),
+                    new ArrayList<>(context.getWrittenPaths()),
+                    context.getPromptAttachments(),
+                    context.getConversationHistory(),
+                    directive.getIntent().name().toLowerCase(),
+                    directive.getContentType() == null ? null : directive.getContentType().name().toLowerCase(),
+                    context.getTurnParseResult().getBody(),
+                    null,
+                    false,
+                    null);
+            context.setNextMessage(nextMessage);
+            context.setNextMessageFromScript(true);
+
+            context.setLogicalTurn(closedTurns + 1);
+            context.getCycle().setCurrentTurnIndex(context.getLogicalTurn());
+            context.setAttemptIndex(1);
+            context.getCycle().resetRetryStreakCount();
+            return new TurnOutboundPrepPhase(coordinator);
+        }
+
+        int summarizeTurns = context.getConfig() != null && context.getConfig().getReasoning() != null
+                ? context.getConfig().getReasoning().getSummarizeCycleTurns()
+                : 1;
+        boolean isSummaryTurn = summarizeTurns > 0 && context.getLogicalTurn() % summarizeTurns == 0;
+        String summaryCandidate = context.getLatestConversationSummary();
+        if (summaryCandidate == null || summaryCandidate.isBlank()) {
+            if (directive.getContentType() == ResponseDirective.ContentType.CONVERSATION_SUMMARY) {
+                summaryCandidate = inbound.getPayload();
+            }
+        }
+        if (isSummaryTurn && summaryCandidate != null && !summaryCandidate.isBlank()) {
+            compressHistoryWithSummary(context, summaryCandidate);
+            context.setLatestConversationSummary(null);
+        }
+
         context.setLogicalTurn(closedTurns + 1);
         context.getCycle().setCurrentTurnIndex(context.getLogicalTurn());
         context.setAttemptIndex(1);
 
         return new TurnOutboundPrepPhase(coordinator); 
+    }
+
+    private void compressHistoryWithSummary(ReasoningContext context, String summaryText) {
+        if (summaryText == null || summaryText.isBlank()) {
+            return;
+        }
+        var history = context.getConversationHistory();
+        var prependMessages = context.getPrependMessages();
+
+        history.clear();
+        if (!context.isCachedContentEnabled() || context.getCycleCachedContentId() == null) {
+            if (prependMessages != null && !prependMessages.isEmpty()) {
+                history.addAll(prependMessages);
+            }
+        }
+        history.add(new br.com.dizeno.reins.reasoning.scripting.ConversationMessage(
+                br.com.dizeno.reins.reasoning.scripting.ConversationMessage.Role.MODEL,
+                summaryText.trim()));
+
+        coordinator.cycleStateManager.emitLifecycleMessage(context.getCycleLog(), "history-summarized: turn=" + context.getLogicalTurn() + "\nsummary:\n" + summaryText.trim());
     }
 }

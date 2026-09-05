@@ -328,6 +328,15 @@ public class ReasoningContext {
     }
 
     /**
+     * Checks if script runner is enabled.
+     *
+     * @return true if script runner config is non-null and enabled, false otherwise
+     */
+    public boolean isScriptRunnerEnabled() {
+        return scriptRunnerConfig != null && scriptRunnerConfig.isEnabled();
+    }
+
+    /**
      * Gets the first turn reference tree.
      *
      * @return the string result
@@ -856,5 +865,25 @@ public class ReasoningContext {
      */
     public void setTurnOperationRequests(List<ToolExecutionRequest> turnOperationRequests) {
         this.turnOperationRequests = turnOperationRequests;
+    }
+
+    private String latestConversationSummary;
+
+    /**
+     * Gets the latest conversation summary extracted from model response blocks.
+     *
+     * @return the summary string, or null if none extracted
+     */
+    public String getLatestConversationSummary() {
+        return latestConversationSummary;
+    }
+
+    /**
+     * Sets the latest conversation summary extracted from model response blocks.
+     *
+     * @param latestConversationSummary the summary string
+     */
+    public void setLatestConversationSummary(String latestConversationSummary) {
+        this.latestConversationSummary = latestConversationSummary;
     }
 }
