@@ -15,7 +15,9 @@ import br.com.dizeno.reins.run.config.settings.*;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * ReinsConfig is part of the general application functions in the reins
@@ -26,30 +28,32 @@ import java.util.List;
 public class ReinsConfig {
     private GeminiSettings gemini = new GeminiSettings();
     private OllamaSettings ollama = new OllamaSettings();
-    private String provider = "gemini";
-    private List<File> scanRoots = new ArrayList<>();
+    private OpenAiSettings openai = new OpenAiSettings();
+    private String provider;
+    private Map<String, File> sourceBases = new LinkedHashMap<>();
+    private boolean skipTest = false;
     private String includePattern = "**/*.md";
-    private boolean defaultScanRoots;
     private boolean failOnError;
     private boolean verbose;
     private boolean dryRun;
     private boolean validateAll;
-    private File mainNlRoot;
-    private File testNlRoot;
+    private int compilationThreads = 1;
+    private boolean freshCompilation = false;
     private TargetSettings target;
     private ReasoningSettings reasoning = new ReasoningSettings();
     private RecompileOnSettings recompileOn = new RecompileOnSettings();
     private EagerlyProvideSettings eagerlyProvide = new EagerlyProvideSettings();
     private LogSettings log = new LogSettings();
     private LoggingSettings logging = new LoggingSettings();
+    private ModelSettings model = new ModelSettings();
+    private BuildSettings build = new BuildSettings();
 
-    private File projectContextFile;
     private ToolingSettings tooling = new ToolingSettings();
-    private McpFileBaseOpsSettings mcp = new McpFileBaseOpsSettings();
-    private boolean enableProjectInference = false;
+    private FileToolsSettings fileTools = new FileToolsSettings();
     private ContextSettings context = new ContextSettings();
     private TrackingSettings tracking = new TrackingSettings();
     private String source;
+    private String note;
     private boolean explicitSourceMode = false;
 
     /**
@@ -89,6 +93,24 @@ public class ReinsConfig {
     }
 
     /**
+     * Gets the openai.
+     *
+     * @return the openai settings
+     */
+    public OpenAiSettings getOpenai() {
+        return openai;
+    }
+
+    /**
+     * Sets the openai.
+     *
+     * @param openai the openai settings
+     */
+    public void setOpenai(OpenAiSettings openai) {
+        this.openai = openai;
+    }
+
+    /**
      * Gets the provider.
      *
      * @return the string result
@@ -112,72 +134,109 @@ public class ReinsConfig {
      * @return the resolved model name, or null if not configured
      */
     public String resolveModel() {
-        if (provider == null) {
-            return gemini != null ? gemini.getModel() : null;
+        if (provider == null || provider.isBlank()) {
+            return null;
         }
         String normalizedProvider = provider.trim().toLowerCase();
         if ("ollama".equals(normalizedProvider)) {
             return ollama != null ? ollama.getModel() : null;
+        } else if ("openai".equals(normalizedProvider)) {
+            return openai != null ? openai.getModel() : null;
         } else if ("stub".equals(normalizedProvider)) {
             return "stub";
-        } else {
+        } else if ("gemini".equals(normalizedProvider)) {
             return gemini != null ? gemini.getModel() : null;
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Resolves the active provider settings based on the selected provider.
+     *
+     * @return the resolved ModelProviderSetting instance, or null if not configured
+     */
+    public ModelProviderSetting resolveActiveModelSettings() {
+        if (provider == null || provider.isBlank()) {
+            return gemini;
+        }
+        String normalizedProvider = provider.trim().toLowerCase();
+        if ("ollama".equals(normalizedProvider)) {
+            return ollama;
+        } else if ("openai".equals(normalizedProvider)) {
+            return openai;
+        } else if ("gemini".equals(normalizedProvider)) {
+            return gemini;
+        } else {
+            return gemini;
         }
     }
 
 
+
     /**
-     * Gets the scan roots.
+     * Gets the scan roots derived dynamically from configured source bases.
      *
      * @return the collection of elements
      */
     public List<File> getScanRoots() {
-        return scanRoots;
+        List<File> roots = new ArrayList<>();
+        if (sourceBases != null) {
+            for (Map.Entry<String, File> entry : sourceBases.entrySet()) {
+                String baseName = entry.getKey();
+                if (entry.getValue() == null) {
+                    continue;
+                }
+                // Only scan main and test bases implicitly.
+                // Custom bases (e.g. doc) are included only when an explicit source is provided.
+                if (!"main".equalsIgnoreCase(baseName) && !"test".equalsIgnoreCase(baseName)) {
+                    continue;
+                }
+                if (skipTest && "test".equalsIgnoreCase(baseName)) {
+                    continue;
+                }
+                roots.add(entry.getValue());
+            }
+        }
+        return roots;
     }
 
-    /**
-     * Sets the scan roots.
-     *
-     * @param scanRoots the scan roots
-     */
-    public void setScanRoots(List<File> scanRoots) {
-        this.scanRoots = scanRoots;
+    public Map<String, File> getSourceBases() {
+        return sourceBases;
     }
 
-    /**
-     * Gets the include pattern.
-     *
-     * @return the string result
-     */
+    public void setSourceBases(Map<String, File> sourceBases) {
+        this.sourceBases = sourceBases != null ? new LinkedHashMap<>(sourceBases) : new LinkedHashMap<>();
+    }
+
+    public File getSourceBase(String name) {
+        return name == null ? null : sourceBases.get(name.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    public void setSourceBase(String name, File file) {
+        if (name != null && file != null) {
+            this.sourceBases.put(name.toLowerCase(java.util.Locale.ROOT), file);
+        }
+    }
+
+    public boolean hasSourceBase(String name) {
+        return name != null && sourceBases.containsKey(name.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    public boolean isSkipTest() {
+        return skipTest;
+    }
+
+    public void setSkipTest(boolean skipTest) {
+        this.skipTest = skipTest;
+    }
+
     public String getIncludePattern() {
         return includePattern;
     }
 
-    /**
-     * Sets the include pattern.
-     *
-     * @param includePattern the include pattern
-     */
     public void setIncludePattern(String includePattern) {
         this.includePattern = includePattern;
-    }
-
-    /**
-     * Checks if the component is default scan roots.
-     *
-     * @return true if successful or matching, false otherwise
-     */
-    public boolean isDefaultScanRoots() {
-        return defaultScanRoots;
-    }
-
-    /**
-     * Sets the default scan roots.
-     *
-     * @param defaultScanRoots the default scan roots
-     */
-    public void setDefaultScanRoots(boolean defaultScanRoots) {
-        this.defaultScanRoots = defaultScanRoots;
     }
 
     /**
@@ -252,41 +311,41 @@ public class ReinsConfig {
         this.validateAll = validateAll;
     }
 
-    /**
-     * Gets the main nl root.
-     *
-     * @return the resolved or constructed object
-     */
-    public File getMainNlRoot() {
-        return mainNlRoot;
+    public int getCompilationThreads() {
+        return build != null ? build.getCompilationThreads() : compilationThreads;
+    }
+
+    public void setCompilationThreads(int compilationThreads) {
+        this.compilationThreads = compilationThreads;
+        if (this.build == null) {
+            this.build = new BuildSettings();
+        }
+        this.build.setCompilationThreads(compilationThreads);
     }
 
     /**
-     * Sets the main nl root.
+     * Checks if freshCompilation is enabled.
      *
-     * @param mainNlRoot the main nl root
+     * @return true if freshCompilation is enabled, false otherwise
      */
-    public void setMainNlRoot(File mainNlRoot) {
-        this.mainNlRoot = mainNlRoot;
+    public boolean isFreshCompilation() {
+        return build != null ? build.isFreshCompilation() : freshCompilation;
     }
 
     /**
-     * Gets the test nl root.
+     * Sets the freshCompilation parameter.
      *
-     * @return the resolved or constructed object
+     * @param freshCompilation whether to perform a fresh compilation
      */
-    public File getTestNlRoot() {
-        return testNlRoot;
+    public void setFreshCompilation(boolean freshCompilation) {
+        this.freshCompilation = freshCompilation;
+        if (this.build == null) {
+            this.build = new BuildSettings();
+        }
+        this.build.setFreshCompilation(freshCompilation);
     }
 
-    /**
-     * Sets the test nl root.
-     *
-     * @param testNlRoot the test nl root
-     */
-    public void setTestNlRoot(File testNlRoot) {
-        this.testNlRoot = testNlRoot;
-    }
+
 
     /**
      * Gets the reasoning.
@@ -344,23 +403,7 @@ public class ReinsConfig {
         this.target = target;
     }
 
-    /**
-     * Gets the project context file.
-     *
-     * @return the resolved or constructed object
-     */
-    public File getProjectContextFile() {
-        return projectContextFile;
-    }
 
-    /**
-     * Sets the project context file.
-     *
-     * @param projectContextFile the project context file
-     */
-    public void setProjectContextFile(File projectContextFile) {
-        this.projectContextFile = projectContextFile;
-    }
 
     /**
      * Gets the eagerly provide.
@@ -417,6 +460,44 @@ public class ReinsConfig {
     }
 
     /**
+     * Gets the model.
+     *
+     * @return the model settings
+     */
+    public ModelSettings getModel() {
+        return model;
+    }
+
+    /**
+     * Sets the model.
+     *
+     * @param model the model settings
+     */
+    public void setModel(ModelSettings model) {
+        this.model = model != null ? model : new ModelSettings();
+    }
+
+    /**
+     * Gets the build settings.
+     *
+     * @return the build settings
+     */
+    public BuildSettings getBuild() {
+        return build;
+    }
+
+    /**
+     * Sets the build settings.
+     *
+     * @param build the build settings
+     */
+    public void setBuild(BuildSettings build) {
+        this.build = build != null ? build : new BuildSettings();
+        this.compilationThreads = this.build.getCompilationThreads();
+        this.freshCompilation = this.build.isFreshCompilation();
+    }
+
+    /**
      * Gets the tooling.
      *
      * @return the collection of elements
@@ -435,40 +516,24 @@ public class ReinsConfig {
     }
 
     /**
-     * Gets the mcp.
+     * Gets the file tools.
      *
      * @return the collection of elements
      */
-    public McpFileBaseOpsSettings getMcp() {
-        return mcp;
+    public FileToolsSettings getFileTools() {
+        return fileTools;
     }
 
     /**
-     * Sets the mcp.
+     * Sets the file tools.
      *
-     * @param mcp the mcp
+     * @param fileTools the file tools
      */
-    public void setMcp(McpFileBaseOpsSettings mcp) {
-        this.mcp = mcp != null ? mcp : new McpFileBaseOpsSettings();
+    public void setFileTools(FileToolsSettings fileTools) {
+        this.fileTools = fileTools != null ? fileTools : new FileToolsSettings();
     }
 
-    /**
-     * Checks if the component is enable project inference.
-     *
-     * @return true if successful or matching, false otherwise
-     */
-    public boolean isEnableProjectInference() {
-        return enableProjectInference;
-    }
 
-    /**
-     * Sets the enable project inference.
-     *
-     * @param enableProjectInference the enable project inference
-     */
-    public void setEnableProjectInference(boolean enableProjectInference) {
-        this.enableProjectInference = enableProjectInference;
-    }
 
     /**
      * Gets the context.
@@ -516,12 +581,58 @@ public class ReinsConfig {
     }
 
     /**
+     * Gets the parsed list of explicit source entries.
+     *
+     * @return list of source paths
+     */
+    public List<String> getSources() {
+        if (source == null || source.isBlank()) {
+            return List.of();
+        }
+        List<String> list = new ArrayList<>();
+        for (String s : source.split(",")) {
+            String trimmed = s.trim();
+            if (!trimmed.isEmpty()) {
+                list.add(trimmed);
+            }
+        }
+        return list;
+    }
+
+    /**
      * Sets the source.
      *
      * @param source the source
      */
     public void setSource(String source) {
         this.source = source;
+    }
+
+    /**
+     * Sets sources from a list.
+     *
+     * @param sources list of source paths
+     */
+    public void setSources(List<String> sources) {
+        this.source = (sources != null && !sources.isEmpty()) ? String.join(",", sources) : null;
+    }
+
+    /**
+     * Gets the note.
+     *
+     * @return the note
+     */
+    public String getNote() {
+        return note;
+    }
+
+    /**
+     * Sets the note.
+     *
+     * @param note the note
+     */
+    public void setNote(String note) {
+        this.note = note;
     }
 
     /**

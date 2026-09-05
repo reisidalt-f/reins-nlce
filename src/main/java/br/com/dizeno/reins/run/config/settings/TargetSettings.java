@@ -13,171 +13,100 @@ package br.com.dizeno.reins.run.config.settings;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * TargetSettings is part of the general application functions in the reins architecture.
- * Acts as a configuration data holder for its prefix settings.
+ * Acts as a configuration data holder for target settings.
  */
 public class TargetSettings {
-    private File project;
-
-    @Deprecated
-    private File root;
     private String main;
     private String test;
+    private Map<String, String> targetBases = new LinkedHashMap<>();
 
-    /**
-     * Gets the project.
-     *
-     * @return the resolved or constructed object
-     */
-    public File getProject() {
-        return project;
-    }
-
-    /**
-     * Sets the project.
-     *
-     * @param project the project
-     */
-    public void setProject(File project) {
-        this.project = project;
-    }
-
-    /**
-     * Gets the root.
-     *
-     * @return the resolved or constructed object
-     */
-    @Deprecated
-    public File getRoot() {
-        return root;
-    }
-
-    /**
-     * Sets the root.
-     *
-     * @param root the root path of the project
-     */
-    @Deprecated
-    public void setRoot(File root) {
-        this.root = root;
-    }
-
-    /**
-     * Gets the legacy root alias.
-     *
-     * @return the resolved or constructed object
-     */
-    public File getLegacyRootAlias() {
-        return root;
-    }
-
-    /**
-     * Sets the legacy root alias.
-     *
-     * @param root the root path of the project
-     */
-    public void setLegacyRootAlias(File root) {
-        this.root = root;
-    }
-
-    /**
-     * Gets the main.
-     *
-     * @return the string result
-     */
     public String getMain() {
         return main;
     }
 
-    /**
-     * Sets the main.
-     *
-     * @param main the main
-     */
     public void setMain(String main) {
         this.main = main;
+        if (main != null) {
+            setTargetBase("main", main);
+        }
     }
 
-    /**
-     * Gets the test.
-     *
-     * @return the string result
-     */
     public String getTest() {
         return test;
     }
 
-    /**
-     * Sets the test.
-     *
-     * @param test the test
-     */
     public void setTest(String test) {
         this.test = test;
-    }
-
-    /**
-     * Resolves the configured value or path project target.
-     *
-     * @param projectRoot the root path of the project
-     * @return the resolved or constructed object
-     */
-    public Path resolveProjectTarget(Path projectRoot) {
-        File configured = project != null ? project : root;
-        if (configured == null) {
-            return projectRoot.toAbsolutePath().normalize();
+        if (test != null) {
+            setTargetBase("test", test);
         }
-        Path configuredPath = configured.toPath();
-        if (configuredPath.isAbsolute()) {
-            return configuredPath.normalize();
+    }
+
+    public Map<String, String> getTargetBases() {
+        return targetBases;
+    }
+
+    public void setTargetBases(Map<String, String> targetBases) {
+        this.targetBases = targetBases != null ? new LinkedHashMap<>(targetBases) : new LinkedHashMap<>();
+    }
+
+    public String getTargetBase(String name) {
+        return name == null ? null : targetBases.get(name.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    public void setTargetBase(String name, String value) {
+        if (name != null && value != null) {
+            String normalizedKey = name.toLowerCase(java.util.Locale.ROOT);
+            this.targetBases.put(normalizedKey, value);
+            if ("main".equals(normalizedKey)) {
+                this.main = value;
+            } else if ("test".equals(normalizedKey)) {
+                this.test = value;
+            }
         }
-        return projectRoot.resolve(configuredPath).toAbsolutePath().normalize();
     }
 
-    /**
-     * Resolves the configured value or path root.
-     *
-     * @param projectRoot the root path of the project
-     * @return the resolved or constructed object
-     */
-    @Deprecated
-    public Path resolveRoot(Path projectRoot) {
-        return resolveProjectTarget(projectRoot);
+    public boolean hasTargetBase(String name) {
+        return name != null && targetBases.containsKey(name.toLowerCase(java.util.Locale.ROOT));
     }
 
-    /**
-     * Resolves the configured value or path main output.
-     *
-     * @param projectRoot the root path of the project
-     * @return the resolved or constructed object
-     */
+    public Path resolveTargetOutput(String baseName, Path projectRoot) {
+        if (baseName == null || baseName.isBlank()) {
+            throw new IllegalStateException("Target output directory is not configured for scope: " + baseName);
+        }
+        String key = baseName.toLowerCase(java.util.Locale.ROOT);
+        String configuredPath = targetBases.get(key);
+        if (configuredPath == null || configuredPath.isBlank()) {
+            if ("main".equals(key) && main != null && !main.isBlank()) {
+                configuredPath = main;
+            } else if ("test".equals(key) && test != null && !test.isBlank()) {
+                configuredPath = test;
+            } else if (targetBases.containsKey("main")) {
+                configuredPath = targetBases.get("main");
+            } else if (main != null && !main.isBlank()) {
+                configuredPath = main;
+            }
+        }
+        if (configuredPath == null || configuredPath.isBlank()) {
+            throw new IllegalStateException("Target output directory is not configured for scope: " + baseName);
+        }
+        Path path = Path.of(configuredPath);
+        if (path.isAbsolute()) {
+            return path.normalize();
+        }
+        return projectRoot.resolve(path).toAbsolutePath().normalize();
+    }
+
     public Path resolveMainOutput(Path projectRoot) {
-        if (main == null || main.isBlank()) {
-            return projectRoot.resolve("src/main/java").toAbsolutePath().normalize();
-        }
-        Path mainPath = Path.of(main);
-        if (mainPath.isAbsolute()) {
-            return mainPath.normalize();
-        }
-        return projectRoot.resolve(mainPath).toAbsolutePath().normalize();
+        return resolveTargetOutput("main", projectRoot);
     }
 
-    /**
-     * Resolves the configured value or path test output.
-     *
-     * @param projectRoot the root path of the project
-     * @return the resolved or constructed object
-     */
     public Path resolveTestOutput(Path projectRoot) {
-        if (test == null || test.isBlank()) {
-            return projectRoot.resolve("src/test/java").toAbsolutePath().normalize();
-        }
-        Path testPath = Path.of(test);
-        if (testPath.isAbsolute()) {
-            return testPath.normalize();
-        }
-        return projectRoot.resolve(testPath).toAbsolutePath().normalize();
+        return resolveTargetOutput("test", projectRoot);
     }
 }

@@ -17,6 +17,7 @@ package br.com.dizeno.reins.run.config.settings;
  */
 public class TrackingSettings {
     private boolean freezeState = false;
+    private boolean cleanupStaleCompiledFiles = false;
 
     /**
      * Checks if the component is freeze state.
@@ -34,5 +35,23 @@ public class TrackingSettings {
      */
     public void setFreezeState(boolean freezeState) {
         this.freezeState = freezeState;
+    }
+
+    /**
+     * Checks if stale compiled files should be automatically cleaned up.
+     *
+     * @return true if cleanup is enabled, false otherwise
+     */
+    public boolean isCleanupStaleCompiledFiles() {
+        return cleanupStaleCompiledFiles;
+    }
+
+    /**
+     * Sets whether stale compiled files should be automatically cleaned up.
+     *
+     * @param cleanupStaleCompiledFiles true to enable cleanup, false otherwise
+     */
+    public void setCleanupStaleCompiledFiles(boolean cleanupStaleCompiledFiles) {
+        this.cleanupStaleCompiledFiles = cleanupStaleCompiledFiles;
     }
 }

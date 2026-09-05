@@ -53,10 +53,24 @@ class TrackingSettingsTest {
     }
 
     @Test
+    void cleanupStaleCompiledFiles_defaultsToFalse() {
+        TrackingSettings settings = new TrackingSettings();
+        assertFalse(settings.isCleanupStaleCompiledFiles());
+    }
+
+    @Test
+    void cleanupStaleCompiledFiles_canBeEnabled() {
+        TrackingSettings settings = new TrackingSettings();
+        settings.setCleanupStaleCompiledFiles(true);
+        assertTrue(settings.isCleanupStaleCompiledFiles());
+    }
+
+    @Test
     void pluginConfig_setTracking_nullSafetyCreatesDefault() {
         ReinsConfig config = new ReinsConfig();
         config.setTracking(null);
         assertNotNull(config.getTracking());
         assertFalse(config.getTracking().isFreezeState());
+        assertFalse(config.getTracking().isCleanupStaleCompiledFiles());
     }
 }

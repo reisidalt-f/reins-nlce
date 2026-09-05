@@ -19,9 +19,75 @@ public class ToolingSettings {
     private String main;
     private String test;
     private String target;
+    private java.util.Map<String, String> bases = new java.util.LinkedHashMap<>();
     private String scriptPath;
     private boolean addReasoningNotes;
     private String scriptDir;
+    private boolean grantFileOwnership = true;
+
+    /**
+     * Gets all configured tooling bases.
+     *
+     * @return map of base names to permission tokens
+     */
+    public java.util.Map<String, String> getBases() {
+        return bases;
+    }
+
+    /**
+     * Sets all configured tooling bases.
+     *
+     * @param bases map of base names to permission tokens
+     */
+    public void setBases(java.util.Map<String, String> bases) {
+        this.bases = bases != null ? new java.util.LinkedHashMap<>(bases) : new java.util.LinkedHashMap<>();
+        if (this.bases.containsKey("main")) this.main = this.bases.get("main");
+        if (this.bases.containsKey("test")) this.test = this.bases.get("test");
+        if (this.bases.containsKey("target")) this.target = this.bases.get("target");
+    }
+
+    /**
+     * Gets permissions for a specific base name.
+     *
+     * @param name base name
+     * @return permission token string
+     */
+    public String getToolingBase(String name) {
+        if (name == null) {
+            return null;
+        }
+        String normalized = name.trim().toLowerCase(java.util.Locale.ROOT);
+        if (bases.containsKey(normalized)) {
+            return bases.get(normalized);
+        }
+        return switch (normalized) {
+            case "main" -> main;
+            case "test" -> test;
+            case "target" -> target;
+            default -> null;
+        };
+    }
+
+    /**
+     * Sets permissions for a specific base name.
+     *
+     * @param name base name
+     * @param value permission token string
+     */
+    public void setToolingBase(String name, String value) {
+        if (name == null || name.isBlank()) {
+            return;
+        }
+        String normalized = name.trim().toLowerCase(java.util.Locale.ROOT);
+        bases.put(normalized, value);
+        if ("main".equals(normalized)) {
+            this.main = value;
+        } else if ("test".equals(normalized)) {
+            this.test = value;
+        } else if ("target".equals(normalized)) {
+            this.target = value;
+        }
+    }
 
     /**
      * Gets the main.
@@ -29,7 +95,7 @@ public class ToolingSettings {
      * @return the string result
      */
     public String getMain() {
-        return main;
+        return getToolingBase("main");
     }
 
     /**
@@ -38,7 +104,7 @@ public class ToolingSettings {
      * @param main the main
      */
     public void setMain(String main) {
-        this.main = main;
+        setToolingBase("main", main);
     }
 
     /**
@@ -47,7 +113,7 @@ public class ToolingSettings {
      * @return the string result
      */
     public String getTest() {
-        return test;
+        return getToolingBase("test");
     }
 
     /**
@@ -56,7 +122,7 @@ public class ToolingSettings {
      * @param test the test
      */
     public void setTest(String test) {
-        this.test = test;
+        setToolingBase("test", test);
     }
 
     /**
@@ -65,7 +131,7 @@ public class ToolingSettings {
      * @return the string result
      */
     public String getTarget() {
-        return target;
+        return getToolingBase("target");
     }
 
     /**
@@ -74,7 +140,7 @@ public class ToolingSettings {
      * @param target the target
      */
     public void setTarget(String target) {
-        this.target = target;
+        setToolingBase("target", target);
     }
 
     /**
@@ -129,5 +195,23 @@ public class ToolingSettings {
      */
     public void setScriptDir(String scriptDir) {
         this.scriptDir = scriptDir;
+    }
+
+    /**
+     * Checks if file ownership granting is enabled.
+     *
+     * @return true if enabled, false otherwise
+     */
+    public boolean isGrantFileOwnership() {
+        return grantFileOwnership;
+    }
+
+    /**
+     * Sets whether file ownership granting is enabled.
+     *
+     * @param grantFileOwnership whether file ownership granting is enabled
+     */
+    public void setGrantFileOwnership(boolean grantFileOwnership) {
+        this.grantFileOwnership = grantFileOwnership;
     }
 }

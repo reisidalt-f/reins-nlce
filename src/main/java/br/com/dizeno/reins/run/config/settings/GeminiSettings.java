@@ -16,7 +16,7 @@ package br.com.dizeno.reins.run.config.settings;
  * architecture.
  * Acts as a configuration data holder for its prefix settings.
  */
-public class GeminiSettings {
+public class GeminiSettings implements ModelProviderSetting {
     private String apiKey;
     private String model;
     private String endpoint;
@@ -159,6 +159,16 @@ public class GeminiSettings {
      */
     public int resolveMaximumTurns() {
         return maximumTurns == null ? 1 : maximumTurns;
+    }
+
+    /**
+     * Gets the temperature.
+     *
+     * @return the float result or null
+     */
+    @Override
+    public Float getTemperature() {
+        return generation != null ? generation.getTemperature() : null;
     }
 
     /**

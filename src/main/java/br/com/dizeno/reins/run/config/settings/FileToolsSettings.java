@@ -12,8 +12,8 @@
 package br.com.dizeno.reins.run.config.settings;
 
 /**
- * McpFileBaseOpsSettings is part of the general application functions in the reins architecture.
+ * FileToolsSettings is part of the general application functions in the reins architecture.
  * Acts as a configuration data holder for its prefix settings.
  */
-public class McpFileBaseOpsSettings extends ToolingSettings {
+public class FileToolsSettings extends ToolingSettings {
 }

@@ -25,6 +25,7 @@ public class LoggingSettings {
     private boolean result = false;
     private boolean trackingFile = false;
     private boolean llmProvider = false;
+    private boolean sourceTag = false;
 
     /**
      * Checks if the component is scripts events.
@@ -186,5 +187,23 @@ public class LoggingSettings {
      */
     public void setLlmProvider(boolean llmProvider) {
         this.llmProvider = llmProvider;
+    }
+
+    /**
+     * Checks if the component is source tag.
+     *
+     * @return true if successful or matching, false otherwise
+     */
+    public boolean isSourceTag() {
+        return sourceTag;
+    }
+
+    /**
+     * Sets the source tag.
+     *
+     * @param sourceTag the source tag
+     */
+    public void setSourceTag(boolean sourceTag) {
+        this.sourceTag = sourceTag;
     }
 }

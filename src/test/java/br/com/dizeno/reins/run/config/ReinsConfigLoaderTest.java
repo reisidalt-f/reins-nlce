@@ -39,7 +39,8 @@ public class ReinsConfigLoaderTest {
         ollamaMap.put("timeoutSeconds", 60);
         map.put("ollama", ollamaMap);
         
-        map.put("scanRoots", "src/main/nl,src/test/nl");
+        map.put("source.main", "src/main/nl");
+        map.put("source.test", "src/test/nl");
 
         File baseDir = tempDir.toFile();
         ReinsConfig config = ReinsConfigLoader.load(null, null, map, baseDir);
@@ -47,8 +48,8 @@ public class ReinsConfigLoaderTest {
         assertEquals("ollama", config.getProvider());
         assertEquals("llama3", config.getOllama().getModel());
         assertEquals(60, config.getOllama().getTimeoutSeconds());
-        assertEquals(2, config.getScanRoots().size());
-        assertEquals(new File(baseDir, "src/main/nl"), config.getScanRoots().get(0));
+        assertEquals(new File(baseDir, "src/main/nl"), config.getSourceBase("main"));
+        assertEquals(new File(baseDir, "src/test/nl"), config.getSourceBase("test"));
     }
 
     @Test
@@ -196,10 +197,10 @@ public class ReinsConfigLoaderTest {
                 "    <apiKey>xml-api-key-789</apiKey>\n" +
                 "    <timeoutSeconds>95</timeoutSeconds>\n" +
                 "  </gemini>\n" +
-                "  <scanRoots>\n" +
-                "    <scanRoot>src/main/nl</scanRoot>\n" +
-                "    <scanRoot>src/test/nl</scanRoot>\n" +
-                "  </scanRoots>\n" +
+                "  <sources>\n" +
+                "    <main>src/main/nl</main>\n" +
+                "    <test>src/test/nl</test>\n" +
+                "  </sources>\n" +
                 "</configuration>";
         try (FileOutputStream out = new FileOutputStream(xmlFile)) {
             out.write(xmlContent.getBytes());
@@ -209,8 +210,8 @@ public class ReinsConfigLoaderTest {
         assertEquals("gemini", config.getProvider());
         assertEquals("xml-api-key-789", config.getGemini().getApiKey());
         assertEquals(95, config.getGemini().getTimeoutSeconds());
-        assertEquals(2, config.getScanRoots().size());
-        assertEquals(new File(baseDir, "src/main/nl"), config.getScanRoots().get(0));
+        assertEquals(new File(baseDir, "src/main/nl"), config.getSourceBase("main"));
+        assertEquals(new File(baseDir, "src/test/nl"), config.getSourceBase("test"));
     }
 
     @Test
@@ -271,4 +272,133 @@ public class ReinsConfigLoaderTest {
 
         assertTrue(config.getLogging().isResult());
     }
+
+    @Test
+    public void testModelRequestResponseLogLoading() {
+        Properties props = new Properties();
+        props.setProperty("reins.model.requestResponseLog", "true");
+
+        File baseDir = tempDir.toFile();
+        ReinsConfig config = ReinsConfigLoader.load(null, props, null, baseDir);
+
+        assertTrue(config.getModel().isRequestResponseLog());
+    }
+
+    @Test
+    public void testTrackingCleanupStaleCompiledFilesLoading() {
+        Properties props = new Properties();
+        props.setProperty("reins.tracking.cleanupStaleCompiledFiles", "true");
+
+        File baseDir = tempDir.toFile();
+        ReinsConfig config = ReinsConfigLoader.load(null, props, null, baseDir);
+
+        assertTrue(config.getTracking().isCleanupStaleCompiledFiles());
+    }
+
+    @Test
+    public void testYamlContextSourcesObjectListParsing() throws IOException {
+        File baseDir = tempDir.toFile();
+        File yamlFile = new File(baseDir, "reins.yaml");
+        String yamlContent = "context:\n" +
+                "  sources:\n" +
+                "    - file: compilation/java/java-aplicacao-raiz.md\n" +
+                "      pattern: \"**/aplicacao.md\"\n" +
+                "      phase: \"*\"\n" +
+                "    - file: compilation/java/java-dominio.md\n" +
+                "      pattern: \"**/dominio/*.md\"\n" +
+                "      phase: \"initial-context\"\n";
+        try (FileOutputStream out = new FileOutputStream(yamlFile)) {
+            out.write(yamlContent.getBytes());
+        }
+
+        ReinsConfig config = ReinsConfigLoader.load(null, null, null, baseDir);
+        assertNotNull(config.getContext());
+        assertEquals(2, config.getContext().getSources().size());
+
+        assertEquals(new File(baseDir, "compilation/java/java-aplicacao-raiz.md"), config.getContext().getSources().get(0).getFile());
+        assertEquals("**/aplicacao.md", config.getContext().getSources().get(0).getPattern());
+        assertEquals(java.util.List.of("*"), config.getContext().getSources().get(0).getPhases());
+
+        assertEquals(new File(baseDir, "compilation/java/java-dominio.md"), config.getContext().getSources().get(1).getFile());
+        assertEquals("**/dominio/*.md", config.getContext().getSources().get(1).getPattern());
+        assertEquals(java.util.List.of("initial-context"), config.getContext().getSources().get(1).getPhases());
+    }
+
+    @Test
+    public void testMultiSourceCliArgsLoading() {
+        String[] args = {
+                "--source", "domain/Customer.md",
+                "--source", "domain/Order.md"
+        };
+
+        File baseDir = tempDir.toFile();
+        ReinsConfig config = ReinsConfigLoader.load(args, null, null, baseDir);
+
+        assertEquals("domain/Customer.md,domain/Order.md", config.getSource());
+        assertEquals(java.util.List.of("domain/Customer.md", "domain/Order.md"), config.getSources());
+        assertTrue(config.isExplicitSourceMode());
+    }
+
+    @Test
+    public void testCommaSeparatedSourceString() {
+        Properties props = new Properties();
+        props.setProperty("reins.source", "domain/Customer.md, domain/Order.md");
+
+        File baseDir = tempDir.toFile();
+        ReinsConfig config = ReinsConfigLoader.load(null, props, null, baseDir);
+
+        assertEquals(java.util.List.of("domain/Customer.md", "domain/Order.md"), config.getSources());
+        assertTrue(config.isExplicitSourceMode());
+    }
+
+    @Test
+    public void testSmallRyeConfigOrdinalPrecedence() throws IOException {
+        File baseDir = tempDir.toFile();
+        File yamlFile = new File(baseDir, "reins.yaml");
+        String yamlContent = "provider: ollama\n" +
+                "ollama:\n" +
+                "  model: yaml-model\n";
+        try (FileOutputStream out = new FileOutputStream(yamlFile)) {
+            out.write(yamlContent.getBytes());
+        }
+
+        Properties sysProps = new Properties();
+        sysProps.setProperty("reins.ollama.model", "sys-model");
+
+        String[] args = {"--ollama.model", "cli-model"};
+
+        ReinsConfig config = ReinsConfigLoader.load(args, sysProps, null, baseDir);
+        assertEquals("cli-model", config.getOllama().getModel());
+    }
+
+    @Test
+    public void testSmallRyeConfigEnvVarInterpolation() throws IOException {
+        File baseDir = tempDir.toFile();
+        File yamlFile = new File(baseDir, "reins.yaml");
+        String envKey = System.getenv().keySet().iterator().next();
+        String expectedVal = System.getenv(envKey);
+
+        String yamlContent = "provider: gemini\n" +
+                "gemini:\n" +
+                "  apiKey: \"${env." + envKey + "}\"\n";
+        try (FileOutputStream out = new FileOutputStream(yamlFile)) {
+            out.write(yamlContent.getBytes());
+        }
+
+        ReinsConfig config = ReinsConfigLoader.load(null, null, null, baseDir);
+        assertEquals(expectedVal, config.getGemini().getApiKey());
+    }
+
+    @Test
+    public void testSmallRyeConfigSourceOrdinalAndProperties() {
+        Map<String, String> map = Map.of("key1", "val1");
+        ReinsConfigLoader.ReinsConfigSource source = new ReinsConfigLoader.ReinsConfigSource("test", map, 250);
+
+        assertEquals("test", source.getName());
+        assertEquals(250, source.getOrdinal());
+        assertEquals("val1", source.getValue("key1"));
+        assertEquals(map, source.getProperties());
+        assertTrue(source.getPropertyNames().contains("key1"));
+    }
 }
+

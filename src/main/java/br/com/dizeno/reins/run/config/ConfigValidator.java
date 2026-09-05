@@ -20,6 +20,7 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -49,11 +50,11 @@ public class ConfigValidator {
             throw new ConfigValidationException("Plugin configuration is missing.");
         }
         if (isBlank(config.getProvider())) {
-            config.setProvider("gemini");
+            throw new ConfigValidationException("provider is required and must be explicitly configured.");
         }
         String provider = config.getProvider().trim().toLowerCase();
-        if (!("gemini".equals(provider) || "ollama".equals(provider) || "stub".equals(provider))) {
-            throw new ConfigValidationException("provider must be one of: gemini, ollama, stub.");
+        if (!("gemini".equals(provider) || "ollama".equals(provider) || "openai".equals(provider) || "stub".equals(provider))) {
+            throw new ConfigValidationException("provider must be one of: gemini, openai, ollama, stub.");
         }
 
         
@@ -61,35 +62,34 @@ public class ConfigValidator {
             validateGeminiConfig(config, warnConsumer);
         } else if ("ollama".equals(provider)) {
             validateOllamaConfig(config, warnConsumer);
+        } else if ("openai".equals(provider)) {
+            validateOpenAiConfig(config, warnConsumer);
         }
 
-        List<File> roots = config.getScanRoots();
-        if (roots == null || roots.isEmpty()) {
-            throw new ConfigValidationException("At least one scan root is required.");
+        File mainSource = config.getSourceBase("main");
+        if (mainSource == null) {
+            throw new ConfigValidationException("Invalid configuration: source.main is required and must be explicitly configured.");
         }
-        for (File root : roots) {
-            if (root == null) {
-                throw new ConfigValidationException("Scan root cannot be null.");
-            }
-            if (!root.toPath().toAbsolutePath().normalize().startsWith(projectBaseDir.toPath().toAbsolutePath().normalize())) {
-                throw new ConfigValidationException("Scan root must be inside project base directory: " + root);
-            }
-            if (!root.exists()) {
-                if (config.isDefaultScanRoots()) {
-                    continue;
+
+        TargetSettings targetSettings = config.getTarget();
+        if (targetSettings == null) {
+            throw new ConfigValidationException("target settings section is required and must define output paths.");
+        }
+
+        if (config.getSourceBases() != null) {
+            for (Map.Entry<String, File> entry : config.getSourceBases().entrySet()) {
+                String baseName = entry.getKey();
+                File baseDir = entry.getValue();
+                validateConfiguredBaseRoot(baseDir, projectBaseDir, "source." + baseName);
+                if (!targetSettings.hasTargetBase(baseName)) {
+                    throw new ConfigValidationException("Source base '" + baseName + "' is defined but has no corresponding target path defined in target." + baseName);
                 }
-                throw new ConfigValidationException("Scan root must exist and be a directory: " + root);
-            }
-            if (!root.isDirectory()) {
-                throw new ConfigValidationException("Scan root must exist and be a directory: " + root);
             }
         }
-        validateConfiguredBaseRoot(config.getMainNlRoot(), projectBaseDir, "mainNlRoot");
-        validateConfiguredBaseRoot(config.getTestNlRoot(), projectBaseDir, "testNlRoot");
+
         ToolingSettings tooling = config.getTooling();
         ReasoningSettings reasoning = config.getReasoning();
         validateScriptsPath(reasoning == null ? null : reasoning.getScriptsPath(), projectBaseDir);
-        TargetSettings targetSettings = config.getTarget();
         validateTargetSettings(targetSettings, projectBaseDir, warnConsumer);
         if (reasoning != null && reasoning.getEnabled() != null) {
             throw new ConfigValidationException("reasoning.enable is no longer supported; inference is always multi-turn.");
@@ -100,18 +100,14 @@ public class ConfigValidator {
         if (reasoning != null && reasoning.getMaxReferenceDepth() <= 0) {
             throw new ConfigValidationException("reasoning.maxReferenceDepth must be > 0.");
         }
+        if (reasoning != null && reasoning.getSummarizeCycleTurns() < 0) {
+            throw new ConfigValidationException("reasoning.summarizeCycleTurns must be >= 0.");
+        }
         validateReferenceTreeDepth(config);
         validateToolingOperationConfig(tooling, projectBaseDir);
         validateLoggingSettings(config);
-        
-        
-        
-        if (config.isEnableProjectInference() && config.getProjectContextFile() != null
-                && !config.getProjectContextFile().exists()) {
-            throw new ConfigValidationException(
-                    "enableProjectInference is true but project file not found: "
-                            + config.getProjectContextFile().getAbsolutePath());
-        }
+        validateModelSettings(config);
+        validateBuildSettings(config);
     }
 
     private void validateTargetSettings(TargetSettings targetSettings,
@@ -121,29 +117,20 @@ public class ConfigValidator {
             return;
         }
 
-        if (targetSettings.getProject() != null && targetSettings.getLegacyRootAlias() != null) {
-            warnConsumer.accept("Both target.project and deprecated target.root are configured; target.project takes precedence and target.root is ignored.");
-        } else if (targetSettings.getLegacyRootAlias() != null) {
-            warnConsumer.accept("target.root is deprecated; use target.project instead.");
+        if (targetSettings.getTargetBases() != null) {
+            for (Map.Entry<String, String> entry : targetSettings.getTargetBases().entrySet()) {
+                validateIndependentTargetPath(entry.getValue(), projectBaseDir, "target." + entry.getKey());
+            }
         }
-
-        if (targetSettings.getProject() != null) {
-            validateConfiguredBaseRoot(targetSettings.getProject(), projectBaseDir, "target.project");
-        } else {
-            validateConfiguredBaseRoot(targetSettings.getLegacyRootAlias(), projectBaseDir, "target.root");
-        }
-
-        validateIndependentTargetPath(targetSettings.getMain(), projectBaseDir, "target.main");
-        validateIndependentTargetPath(targetSettings.getTest(), projectBaseDir, "target.test");
     }
 
     private void validateReferenceTreeDepth(ReinsConfig config) {
         ContextSettings context = config.getContext();
-        if (context == null) {
+        if (context == null || context.getReferencesTree() == null) {
             return;
         }
         try {
-            context.resolveReferenceDepthPolicy();
+            context.getReferencesTree().resolveReferenceDepthPolicy();
         } catch (IllegalArgumentException ex) {
             throw new ConfigValidationException(ReferenceDepthPolicy.validValuesMessage());
         }
@@ -156,15 +143,15 @@ public class ConfigValidator {
         validateToolingAddReasoningNotes(tooling);
         
         if (!isBlank(tooling.getMain())) {
-            validateMcpTokens(tooling.getMain(), "tooling.main");
+            validateToolTokens(tooling.getMain(), "tooling.main");
         }
         
         if (!isBlank(tooling.getTest())) {
-            validateMcpTokens(tooling.getTest(), "tooling.test");
+            validateToolTokens(tooling.getTest(), "tooling.test");
         }
         
         if (!isBlank(tooling.getTarget())) {
-            validateMcpTokens(tooling.getTarget(), "tooling.target");
+            validateToolTokens(tooling.getTarget(), "tooling.target");
         }
         validateToolingScriptPath(tooling.getScriptPath(), projectBaseDir);
     }
@@ -226,7 +213,7 @@ public class ConfigValidator {
         }
     }
 
-    private void validateMcpTokens(String tokenString, String fieldName) {
+    private void validateToolTokens(String tokenString, String fieldName) {
         String[] parts = tokenString.split("\\s*,\\s*");
         for (String part : parts) {
             if (part.isBlank()) {
@@ -239,7 +226,7 @@ public class ConfigValidator {
                     || normalizedToken.equals("delete");
             if (!valid) {
                 throw new ConfigValidationException(
-                    "Unrecognized MCP operation token '" + part + "' in " + fieldName + ". " +
+                    "Unrecognized tool operation token '" + part + "' in " + fieldName + ". " +
                     "Recognized tokens: list, list_compiled, read, write, patch, delete"
                 );
             }
@@ -273,16 +260,12 @@ public class ConfigValidator {
             return;
         }
         File normalizedRoot = root.isAbsolute() ? root : new File(projectBaseDir, root.getPath());
-        validateDirectoryPath(normalizedRoot, projectBaseDir, fieldName, root);
-    }
-
-    private void validateDirectoryPath(File resolvedRoot, File projectBaseDir, String fieldName, File displayRoot) {
-        if (!resolvedRoot.toPath().toAbsolutePath().normalize()
+        if (!normalizedRoot.toPath().toAbsolutePath().normalize()
                 .startsWith(projectBaseDir.toPath().toAbsolutePath().normalize())) {
-            throw new ConfigValidationException(fieldName + " must be inside project base directory: " + displayRoot);
+            throw new ConfigValidationException(fieldName + " must be inside project base directory: " + root);
         }
-        if (resolvedRoot.exists() && !resolvedRoot.isDirectory()) {
-            throw new ConfigValidationException(fieldName + " must be a directory when it exists: " + displayRoot);
+        if (!normalizedRoot.exists() || !normalizedRoot.isDirectory()) {
+            throw new ConfigValidationException("Source root must exist and be a directory: " + root);
         }
     }
 
@@ -350,6 +333,19 @@ public class ConfigValidator {
         }
     }
 
+    private void validateModelSettings(ReinsConfig config) {
+        if (config.getModel() == null) {
+            config.setModel(new ModelSettings());
+        }
+    }
+
+    private void validateBuildSettings(ReinsConfig config) {
+        if (config.getCompilationThreads() < 1) {
+            throw new ConfigValidationException(
+                    "compilationThreads must be >= 1, got: " + config.getCompilationThreads());
+        }
+    }
+
     private void validateGeminiConfig(ReinsConfig config, Consumer<String> warnConsumer) {
         GeminiSettings gemini = config.getGemini();
         if (gemini == null) {
@@ -404,6 +400,31 @@ public class ConfigValidator {
         if (ollama.getApiKey() != null) {
             String trimmed = ollama.getApiKey().trim();
             ollama.setApiKey(trimmed.isEmpty() ? null : trimmed);
+        }
+    }
+
+    private void validateOpenAiConfig(ReinsConfig config, Consumer<String> warnConsumer) {
+        OpenAiSettings openai = config.getOpenai();
+        if (openai == null) {
+            throw new ConfigValidationException("OpenAI configuration section is missing.");
+        }
+        if (isBlank(openai.getModel())) {
+            throw new ConfigValidationException("OpenAI model is required.");
+        }
+        if (isBlank(openai.getEndpoint())) {
+            openai.setEndpoint("https://api.openai.com");
+        }
+        validateEndpoint(openai.getEndpoint());
+        if (openai.getTimeoutSeconds() <= 0) {
+            throw new ConfigValidationException("openai.timeoutSeconds must be > 0.");
+        }
+        if (openai.getRetryAttempts() < 0) {
+            openai.setRetryAttempts(0);
+            warnConsumer.accept("openai.retryAttempts was negative and has been clamped to 0.");
+        }
+        if (openai.getApiKey() != null) {
+            String trimmed = openai.getApiKey().trim();
+            openai.setApiKey(trimmed.isEmpty() ? null : trimmed);
         }
     }
 }

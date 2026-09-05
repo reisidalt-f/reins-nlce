@@ -16,54 +16,47 @@ import br.com.dizeno.reins.compilation.context.ReferenceDepthPolicy;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * ContextSettings is part of the general application functions in the reins architecture.
  * Acts as a configuration data holder for its prefix settings.
  */
 public class ContextSettings {
-    private boolean includeProjectFiles = false;
-    private boolean attachReferencedFiles = true;
     private boolean cachedContent = true;
     private boolean allowScriptedMessageData = true;
     private boolean allowScriptedAttachments = true;
-    private List<File> sources = new ArrayList<>();
-    private String referencesTreeDepth;
+    private boolean compiledFiles = true;
+    private boolean inspectedFiles = true;
+    private List<ContextSourceSpec> sources = new ArrayList<>();
+    private List<String> plainAttachmentExtensions = new ArrayList<>();
+    private ReferencesTreeSettings referencesTree = new ReferencesTreeSettings();
+
+    private static final Set<String> WELL_KNOWN_PLAIN_TEXT_EXTENSIONS = Set.of(
+            "md", "markdown", "txt", "java", "py", "js", "ts", "jsx", "tsx",
+            "json", "yaml", "yml", "xml", "html", "htm", "css", "scss", "sass",
+            "sql", "sh", "bash", "kt", "kts", "c", "cpp", "h", "hpp", "cs", "go",
+            "rs", "toml", "env", "properties", "ini", "conf", "log", "csv",
+            "gradle", "proto", "graphql", "groovy", "scala", "swift", "rb", "php",
+            "dockerfile", "ftl", "mustache"
+    );
 
     /**
-     * Checks if the component is include project files.
+     * Gets the references tree settings.
      *
-     * @return true if successful or matching, false otherwise
+     * @return the references tree settings object
      */
-    public boolean isIncludeProjectFiles() {
-        return includeProjectFiles;
+    public ReferencesTreeSettings getReferencesTree() {
+        return referencesTree;
     }
 
     /**
-     * Sets the include project files.
+     * Sets the references tree settings.
      *
-     * @param includeProjectFiles the include project files
+     * @param referencesTree the references tree settings object
      */
-    public void setIncludeProjectFiles(boolean includeProjectFiles) {
-        this.includeProjectFiles = includeProjectFiles;
-    }
-
-    /**
-     * Checks if the component is attach referenced files.
-     *
-     * @return true if successful or matching, false otherwise
-     */
-    public boolean isAttachReferencedFiles() {
-        return attachReferencedFiles;
-    }
-
-    /**
-     * Sets the attach referenced files.
-     *
-     * @param attachReferencedFiles the attach referenced files
-     */
-    public void setAttachReferencedFiles(boolean attachReferencedFiles) {
-        this.attachReferencedFiles = attachReferencedFiles;
+    public void setReferencesTree(ReferencesTreeSettings referencesTree) {
+        this.referencesTree = referencesTree != null ? referencesTree : new ReferencesTreeSettings();
     }
 
     /**
@@ -121,11 +114,47 @@ public class ContextSettings {
     }
 
     /**
+     * Checks if compiled files are eagerly provided in context.
+     *
+     * @return true if compiled files are enabled, false otherwise
+     */
+    public boolean isCompiledFiles() {
+        return compiledFiles;
+    }
+
+    /**
+     * Sets whether compiled files are eagerly provided in context.
+     *
+     * @param compiledFiles whether compiled files are enabled
+     */
+    public void setCompiledFiles(boolean compiledFiles) {
+        this.compiledFiles = compiledFiles;
+    }
+
+    /**
+     * Checks if inspected files are eagerly provided in context.
+     *
+     * @return true if inspected files are enabled, false otherwise
+     */
+    public boolean isInspectedFiles() {
+        return inspectedFiles;
+    }
+
+    /**
+     * Sets whether inspected files are eagerly provided in context.
+     *
+     * @param inspectedFiles whether inspected files are enabled
+     */
+    public void setInspectedFiles(boolean inspectedFiles) {
+        this.inspectedFiles = inspectedFiles;
+    }
+
+    /**
      * Gets the sources.
      *
      * @return the collection of elements
      */
-    public List<File> getSources() {
+    public List<ContextSourceSpec> getSources() {
         return sources;
     }
 
@@ -134,34 +163,67 @@ public class ContextSettings {
      *
      * @param sources the sources
      */
-    public void setSources(List<File> sources) {
+    public void setSources(List<ContextSourceSpec> sources) {
         this.sources = sources != null ? sources : new ArrayList<>();
     }
 
     /**
-     * Gets the references tree depth.
+     * Gets the plain attachment extensions list.
      *
-     * @return the string result
+     * @return the collection of elements
      */
-    public String getReferencesTreeDepth() {
-        return referencesTreeDepth;
+    public List<String> getPlainAttachmentExtensions() {
+        return plainAttachmentExtensions;
     }
 
     /**
-     * Sets the references tree depth.
+     * Sets the plain attachment extensions list.
      *
-     * @param referencesTreeDepth the references tree depth
+     * @param plainAttachmentExtensions the list of plain attachment extensions
      */
-    public void setReferencesTreeDepth(String referencesTreeDepth) {
-        this.referencesTreeDepth = referencesTreeDepth;
+    public void setPlainAttachmentExtensions(List<String> plainAttachmentExtensions) {
+        this.plainAttachmentExtensions = plainAttachmentExtensions != null ? plainAttachmentExtensions : new ArrayList<>();
     }
 
     /**
-     * Resolves the configured value or path reference depth policy.
+     * Checks if the given path or filename has a plain attachment extension (either well-known or user-configured).
      *
-     * @return the resolved or constructed object
+     * @param pathOrFilename the path or filename
+     * @return true if it should be attached as plain text/markdown, false otherwise
      */
-    public ReferenceDepthPolicy resolveReferenceDepthPolicy() {
-        return ReferenceDepthPolicy.parse(referencesTreeDepth);
+    public boolean isPlainAttachment(String pathOrFilename) {
+        if (pathOrFilename == null || pathOrFilename.isBlank()) {
+            return false;
+        }
+        String ext = extractExtension(pathOrFilename);
+        if (ext.isEmpty()) {
+            return false;
+        }
+        if (WELL_KNOWN_PLAIN_TEXT_EXTENSIONS.contains(ext)) {
+            return true;
+        }
+        if (plainAttachmentExtensions != null) {
+            for (String userExt : plainAttachmentExtensions) {
+                if (userExt != null) {
+                    String cleanUserExt = userExt.trim();
+                    if (cleanUserExt.startsWith(".")) {
+                        cleanUserExt = cleanUserExt.substring(1);
+                    }
+                    if (cleanUserExt.equalsIgnoreCase(ext)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private static String extractExtension(String path) {
+        int lastDot = path.lastIndexOf('.');
+        if (lastDot >= 0 && lastDot < path.length() - 1) {
+            return path.substring(lastDot + 1).toLowerCase().trim();
+        }
+        return "";
     }
 }
+

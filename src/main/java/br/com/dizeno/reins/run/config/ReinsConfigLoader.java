@@ -29,6 +29,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * ReinsConfigLoader is part of the general application functions in the reins architecture.
@@ -94,64 +96,69 @@ public class ReinsConfigLoader {
         
         Map<String, String> fileProps = new HashMap<>();
         if (configFile != null) {
-            loadFileProperties(configFile, fileProps, baseDir);
+            Map<String, String> rawFileProps = new HashMap<>();
+            loadFileProperties(configFile, rawFileProps, baseDir);
+            for (Map.Entry<String, String> entry : rawFileProps.entrySet()) {
+                fileProps.put(cleanKey(entry.getKey()), entry.getValue());
+            }
         }
 
-        
         Map<String, String> sysPropsMap = new HashMap<>();
         if (sysProps != null) {
             for (String key : sysProps.stringPropertyNames()) {
                 if (key.startsWith("reins.")) {
-                    sysPropsMap.put(key, sysProps.getProperty(key));
+                    sysPropsMap.put(cleanKey(key), sysProps.getProperty(key));
                 }
             }
         }
 
-        
         Map<String, String> overlayProps = new HashMap<>();
         if (libProps != null) {
             for (String key : libProps.stringPropertyNames()) {
-                overlayProps.put(key, libProps.getProperty(key));
+                overlayProps.put(cleanKey(key), libProps.getProperty(key));
             }
         }
         if (libConfig != null) {
-            flattenMap(libConfig, overlayProps, "");
+            Map<String, String> rawLibConfig = new HashMap<>();
+            flattenMap(libConfig, rawLibConfig, "");
+            for (Map.Entry<String, String> entry : rawLibConfig.entrySet()) {
+                overlayProps.put(cleanKey(entry.getKey()), entry.getValue());
+            }
         }
         if (cliArgs != null) {
-            parseCliArgs(cliArgs, overlayProps);
+            Map<String, String> rawCliArgs = new HashMap<>();
+            parseCliArgs(cliArgs, rawCliArgs);
+            for (Map.Entry<String, String> entry : rawCliArgs.entrySet()) {
+                overlayProps.put(cleanKey(entry.getKey()), entry.getValue());
+            }
         }
 
-        
-        
-        for (Map.Entry<String, String> e : fileProps.entrySet()) {
-            bindProperty(config, e.getKey(), e.getValue(), baseDir);
-        }
-        
-        for (Map.Entry<String, String> e : sysPropsMap.entrySet()) {
-            bindProperty(config, e.getKey(), e.getValue(), baseDir);
-        }
-        
-        for (Map.Entry<String, String> e : overlayProps.entrySet()) {
-            bindProperty(config, e.getKey(), e.getValue(), baseDir);
+        java.util.Set<String> allKeys = new java.util.LinkedHashSet<>();
+        allKeys.addAll(fileProps.keySet());
+        allKeys.addAll(sysPropsMap.keySet());
+        allKeys.addAll(overlayProps.keySet());
+
+        io.smallrye.config.SmallRyeConfigBuilder builder = new io.smallrye.config.SmallRyeConfigBuilder()
+                .addDefaultSources()
+                .withSources(new EnvWithPrefixConfigSource())
+                .withSources(new ReinsConfigSource("ReinsFileConfig", fileProps, 200))
+                .withSources(new ReinsConfigSource("ReinsSysConfig", sysPropsMap, 300))
+                .withSources(new ReinsConfigSource("ReinsOverlayConfig", overlayProps, 500));
+
+        io.smallrye.config.SmallRyeConfig smallRyeConfig = builder.build();
+
+        for (String key : allKeys) {
+            String value;
+            try {
+                value = smallRyeConfig.getValue(key, String.class);
+            } catch (Exception ex) {
+                value = smallRyeConfig.getRawValue(key);
+            }
+            if (value != null) {
+                bindProperty(config, key, value, baseDir);
+            }
         }
 
-        if (config.getMainNlRoot() == null) {
-            config.setMainNlRoot(new File(baseDir, "src/main/nl"));
-        }
-        if (config.getTestNlRoot() == null) {
-            config.setTestNlRoot(new File(baseDir, "src/test/nl"));
-        }
-        if (config.getScanRoots() == null || config.getScanRoots().isEmpty()) {
-            config.setDefaultScanRoots(true);
-            List<File> defaultRoots = new ArrayList<>();
-            defaultRoots.add(config.getMainNlRoot());
-            defaultRoots.add(config.getTestNlRoot());
-            config.setScanRoots(defaultRoots);
-        }
-
-        if (config.getProjectContextFile() == null) {
-            config.setProjectContextFile(new File(baseDir, "project.md"));
-        }
         if (config.getTarget() == null) {
             config.setTarget(new TargetSettings());
         }
@@ -159,17 +166,111 @@ public class ReinsConfigLoader {
         return config;
     }
 
+    private static String cleanKey(String key) {
+        return key.startsWith("reins.") ? key.substring(6) : key;
+    }
+
+    public static class EnvWithPrefixConfigSource implements org.eclipse.microprofile.config.spi.ConfigSource {
+        private final Map<String, String> envMap = new HashMap<>();
+
+        public EnvWithPrefixConfigSource() {
+            for (Map.Entry<String, String> entry : System.getenv().entrySet()) {
+                envMap.put("env." + entry.getKey(), entry.getValue());
+                envMap.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        @Override
+        public Map<String, String> getProperties() {
+            return envMap;
+        }
+
+        @Override
+        public java.util.Set<String> getPropertyNames() {
+            return envMap.keySet();
+        }
+
+        @Override
+        public int getOrdinal() {
+            return 300;
+        }
+
+        @Override
+        public String getValue(String propertyName) {
+            if (propertyName.startsWith("env.")) {
+                return System.getenv(propertyName.substring(4));
+            }
+            return System.getenv(propertyName);
+        }
+
+        @Override
+        public String getName() {
+            return "EnvWithPrefixConfigSource";
+        }
+    }
+
+    public static class ReinsConfigSource implements org.eclipse.microprofile.config.spi.ConfigSource {
+        private final String name;
+        private final Map<String, String> properties;
+        private final int ordinal;
+
+        public ReinsConfigSource(String name, Map<String, String> properties, int ordinal) {
+            this.name = name;
+            this.properties = properties;
+            this.ordinal = ordinal;
+        }
+
+        @Override
+        public Map<String, String> getProperties() {
+            return properties;
+        }
+
+        @Override
+        public java.util.Set<String> getPropertyNames() {
+            return properties.keySet();
+        }
+
+        @Override
+        public int getOrdinal() {
+            return ordinal;
+        }
+
+        @Override
+        public String getValue(String propertyName) {
+            String clean = propertyName.startsWith("reins.") ? propertyName.substring(6) : propertyName;
+            return properties.get(clean);
+        }
+
+        @Override
+        public String getName() {
+            return name;
+        }
+    }
+
     private static void parseCliArgs(String[] args, Map<String, String> target) {
+        if (args == null) return;
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
-            if (arg.startsWith("--")) {
+            if (arg.startsWith("-D")) {
+                String prop = arg.substring(2);
+                int eqIdx = prop.indexOf('=');
+                if (eqIdx > 0) {
+                    target.put(prop.substring(0, eqIdx), prop.substring(eqIdx + 1));
+                } else {
+                    target.put(prop, "true");
+                }
+            } else if (arg.startsWith("--")) {
                 String key = arg.substring(2);
                 if (key.equals("config")) {
                     i++; 
                     continue;
                 }
-                if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
-                    target.put(key, args[i + 1]);
+                if (i + 1 < args.length && !args[i + 1].startsWith("--") && !args[i + 1].startsWith("-D")) {
+                    if ("source".equals(key) && target.containsKey(key)) {
+                        target.put(key, target.get(key) + "," + args[i + 1]);
+                    } else {
+                        target.put(key, args[i + 1]);
+                    }
                     i++;
                 } else {
                     target.put(key, "true");
@@ -188,14 +289,35 @@ public class ReinsConfigLoader {
                 flattenMap(subMap, target, key);
             } else if (val instanceof List) {
                 List<?> list = (List<?>) val;
-                StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < list.size(); i++) {
-                    if (i > 0) {
-                        sb.append(",");
+                boolean isListOfMaps = false;
+                for (Object item : list) {
+                    if (item instanceof Map) {
+                        isListOfMaps = true;
+                        break;
                     }
-                    sb.append(list.get(i).toString());
                 }
-                target.put(key, sb.toString());
+                if (isListOfMaps) {
+                    for (int i = 0; i < list.size(); i++) {
+                        Object item = list.get(i);
+                        String itemKey = key + "." + i;
+                        if (item instanceof Map) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> subMap = (Map<String, Object>) item;
+                            flattenMap(subMap, target, itemKey);
+                        } else if (item != null) {
+                            target.put(itemKey, item.toString());
+                        }
+                    }
+                } else {
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < list.size(); i++) {
+                        if (i > 0) {
+                            sb.append(",");
+                        }
+                        sb.append(list.get(i).toString());
+                    }
+                    target.put(key, sb.toString());
+                }
             } else if (val != null) {
                 target.put(key, val.toString());
             }
@@ -272,14 +394,102 @@ public class ReinsConfigLoader {
         }
     }
 
-    private static void bindProperty(ReinsConfig config, String key, String value, File baseDir) {
+    private static final Pattern ENV_VAR_PATTERN = Pattern.compile("\\$\\{env\\.([^}]+)\\}");
+
+    public static String interpolateEnvVars(String value) {
+        if (value == null || !value.contains("${env.")) {
+            return value;
+        }
+        Matcher matcher = ENV_VAR_PATTERN.matcher(value);
+        StringBuilder sb = new StringBuilder();
+        while (matcher.find()) {
+            String varName = matcher.group(1);
+            String envVal = System.getenv(varName);
+            if (envVal == null) {
+                envVal = "";
+            }
+            matcher.appendReplacement(sb, Matcher.quoteReplacement(envVal));
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
+
+    private static void bindProperty(ReinsConfig config, String key, String rawValue, File baseDir) {
+        String value = interpolateEnvVars(rawValue);
         String cleanKey = key.startsWith("reins.") ? key.substring(6) : key;
+        if (cleanKey.startsWith("context.sources.")) {
+            String subKey = cleanKey.substring("context.sources.".length());
+            bindContextSourceProperty(config, subKey, value, baseDir);
+            return;
+        }
+        if (cleanKey.startsWith("source.")) {
+            String baseName = cleanKey.substring("source.".length());
+            if (!baseName.isBlank()) {
+                config.setSourceBase(baseName, resolveFile(value, baseDir));
+            }
+            return;
+        }
+        if (cleanKey.startsWith("sources.")) {
+            String baseName = cleanKey.substring("sources.".length());
+            if (!baseName.isBlank()) {
+                config.setSourceBase(baseName, resolveFile(value, baseDir));
+            }
+            return;
+        }
+        if (cleanKey.startsWith("target.")) {
+            String baseName = cleanKey.substring("target.".length());
+            if (!baseName.isBlank()) {
+                getOrInitTarget(config).setTargetBase(baseName, value);
+            }
+            return;
+        }
+        if (cleanKey.startsWith("tooling.")) {
+            String baseName = cleanKey.substring("tooling.".length());
+            if ("scriptPath".equals(baseName)) {
+                config.getTooling().setScriptPath(value);
+            } else if ("addReasoningNotes".equals(baseName)) {
+                config.getTooling().setAddReasoningNotes(Boolean.parseBoolean(value));
+            } else if ("grantFileOwnership".equalsIgnoreCase(baseName)) {
+                config.getTooling().setGrantFileOwnership(Boolean.parseBoolean(value));
+            } else if (!baseName.isBlank()) {
+                config.getTooling().setToolingBase(baseName, value);
+            }
+            return;
+        }
+        if (cleanKey.startsWith("tracking.")) {
+            String baseName = cleanKey.substring("tracking.".length());
+            if ("freezeState".equalsIgnoreCase(baseName)) {
+                config.getTracking().setFreezeState(Boolean.parseBoolean(value));
+            } else if ("cleanupStaleCompiledFiles".equalsIgnoreCase(baseName)) {
+                config.getTracking().setCleanupStaleCompiledFiles(Boolean.parseBoolean(value));
+            }
+            return;
+        }
+        if (cleanKey.startsWith("model.")) {
+            String baseName = cleanKey.substring("model.".length());
+            if ("requestResponseLog".equalsIgnoreCase(baseName)) {
+                config.getModel().setRequestResponseLog(Boolean.parseBoolean(value));
+            }
+            return;
+        }
+        if (cleanKey.startsWith("build.")) {
+            String baseName = cleanKey.substring("build.".length());
+            if ("compilationThreads".equalsIgnoreCase(baseName)) {
+                config.setCompilationThreads(Integer.parseInt(value));
+            } else if ("freshCompilation".equalsIgnoreCase(baseName)) {
+                boolean val = Boolean.parseBoolean(value);
+                config.setFreshCompilation(val);
+            }
+            return;
+        }
+        if ("skipTest".equalsIgnoreCase(cleanKey) || "skipTests".equalsIgnoreCase(cleanKey)) {
+            config.setSkipTest(Boolean.parseBoolean(value));
+            return;
+        }
+
         switch (cleanKey) {
             case "provider":
                 config.setProvider(value);
-                break;
-            case "scanRoots":
-                config.setScanRoots(parseFileList(value, baseDir));
                 break;
             case "includePattern":
                 config.setIncludePattern(value);
@@ -297,21 +507,25 @@ public class ReinsConfigLoader {
             case "validateAll":
                 config.setValidateAll(Boolean.parseBoolean(value));
                 break;
-            case "projectContextFile":
-                config.setProjectContextFile(resolveFile(value, baseDir));
+            case "compilationThreads":
+            case "compilationthreads":
+                config.setCompilationThreads(Integer.parseInt(value));
                 break;
-            case "enableProjectInference":
-                config.setEnableProjectInference(Boolean.parseBoolean(value));
-                break;
-            case "mainNlRoot":
-                config.setMainNlRoot(resolveFile(value, baseDir));
-                break;
-            case "testNlRoot":
-                config.setTestNlRoot(resolveFile(value, baseDir));
+            case "freshCompilation":
+            case "freshcompilation":
+                config.setFreshCompilation(Boolean.parseBoolean(value));
                 break;
             case "source":
-                config.setSource(value);
-                config.setExplicitSourceMode(value != null && !value.trim().isEmpty());
+            case "sources":
+                if (config.getSource() != null && !config.getSource().isBlank()) {
+                    config.setSource(config.getSource() + "," + value);
+                } else {
+                    config.setSource(value);
+                }
+                config.setExplicitSourceMode(config.getSource() != null && !config.getSource().trim().isEmpty());
+                break;
+            case "note":
+                config.setNote(value);
                 break;
             case "gemini.apiKey":
                 config.getGemini().setApiKey(value);
@@ -364,17 +578,20 @@ public class ReinsConfigLoader {
             case "ollama.retryAttempts":
                 config.getOllama().setRetryAttempts(Integer.parseInt(value));
                 break;
-            case "target.project":
-                getOrInitTarget(config).setProject(resolveFile(value, baseDir));
+            case "openai.model":
+                config.getOpenai().setModel(value);
                 break;
-            case "target.root":
-                getOrInitTarget(config).setRoot(resolveFile(value, baseDir));
+            case "openai.endpoint":
+                config.getOpenai().setEndpoint(value);
                 break;
-            case "target.main":
-                getOrInitTarget(config).setMain(value);
+            case "openai.apiKey":
+                config.getOpenai().setApiKey(value);
                 break;
-            case "target.test":
-                getOrInitTarget(config).setTest(value);
+            case "openai.timeoutSeconds":
+                config.getOpenai().setTimeoutSeconds(Integer.parseInt(value));
+                break;
+            case "openai.retryAttempts":
+                config.getOpenai().setRetryAttempts(Integer.parseInt(value));
                 break;
             case "reasoning.maxTurns":
                 config.getReasoning().setMaxTurns(Integer.parseInt(value));
@@ -400,6 +617,10 @@ public class ReinsConfigLoader {
             case "reasoning.turnCountNote":
                 config.getReasoning().setTurnCountNote(Boolean.parseBoolean(value));
                 break;
+            case "reasoning.summarizeCycleTurns":
+            case "reasoning.summarizeTurnInterval":
+                config.getReasoning().setSummarizeCycleTurns(Integer.parseInt(value));
+                break;
             case "recompileOn.markdownReferences":
                 config.getRecompileOn().setMarkdownReferences(Boolean.parseBoolean(value));
                 break;
@@ -408,12 +629,6 @@ public class ReinsConfigLoader {
                 break;
             case "recompileOn.compiledFiles":
                 config.getRecompileOn().setCompiledFiles(Boolean.parseBoolean(value));
-                break;
-            case "eagerlyProvide.previouslyCompiledFiles":
-                config.getEagerlyProvide().setPreviouslyCompiledFiles(Boolean.parseBoolean(value));
-                break;
-            case "eagerlyProvide.previouslyInspectedFiles":
-                config.getEagerlyProvide().setPreviouslyInspectedFiles(Boolean.parseBoolean(value));
                 break;
             case "eagerlyProvide.maxAttachmentSizeBytes":
                 config.getEagerlyProvide().setMaxAttachmentSizeBytes(Long.parseLong(value));
@@ -445,11 +660,18 @@ public class ReinsConfigLoader {
             case "logging.llmProvider":
                 config.getLogging().setLlmProvider(Boolean.parseBoolean(value));
                 break;
-            case "context.includeProjectFiles":
-                config.getContext().setIncludeProjectFiles(Boolean.parseBoolean(value));
+            case "logging.sourceTag":
+            case "logging.sourcetag":
+                config.getLogging().setSourceTag(Boolean.parseBoolean(value));
                 break;
-            case "context.attachReferencedFiles":
-                config.getContext().setAttachReferencedFiles(Boolean.parseBoolean(value));
+            case "context.referencesTree.attachFiles":
+                config.getContext().getReferencesTree().setAttachFiles(Boolean.parseBoolean(value));
+                break;
+            case "context.referencesTree.depth":
+                config.getContext().getReferencesTree().setDepth(value);
+                break;
+            case "context.referencesTree.maxDepth":
+                config.getContext().getReferencesTree().setMaxDepth(Integer.parseInt(value));
                 break;
             case "context.cachedContent":
                 config.getContext().setCachedContent(Boolean.parseBoolean(value));
@@ -460,11 +682,17 @@ public class ReinsConfigLoader {
             case "context.allowScriptedAttachments":
                 config.getContext().setAllowScriptedAttachments(Boolean.parseBoolean(value));
                 break;
-            case "context.sources":
-                config.getContext().setSources(parseFileList(value, baseDir));
+            case "context.compiledFiles":
+                config.getContext().setCompiledFiles(Boolean.parseBoolean(value));
                 break;
-            case "context.referencesTreeDepth":
-                config.getContext().setReferencesTreeDepth(value);
+            case "context.inspectedFiles":
+                config.getContext().setInspectedFiles(Boolean.parseBoolean(value));
+                break;
+            case "context.sources":
+                bindContextSourceProperty(config, "", value, baseDir);
+                break;
+            case "context.plainAttachmentExtensions":
+                config.getContext().setPlainAttachmentExtensions(parseStringList(value));
                 break;
             case "tooling.main":
                 config.getTooling().setMain(value);
@@ -481,8 +709,17 @@ public class ReinsConfigLoader {
             case "tooling.addReasoningNotes":
                 config.getTooling().setAddReasoningNotes(Boolean.parseBoolean(value));
                 break;
+            case "tooling.grantFileOwnership":
+            case "tooling.grantfileownership":
+                config.getTooling().setGrantFileOwnership(Boolean.parseBoolean(value));
+                break;
             case "tracking.freezeState":
+            case "tracking.freezestate":
                 config.getTracking().setFreezeState(Boolean.parseBoolean(value));
+                break;
+            case "tracking.cleanupStaleCompiledFiles":
+            case "tracking.cleanupstalecompiledfiles":
+                config.getTracking().setCleanupStaleCompiledFiles(Boolean.parseBoolean(value));
                 break;
         }
     }
@@ -501,6 +738,19 @@ public class ReinsConfigLoader {
         return config.getTarget();
     }
 
+    private static List<String> parseStringList(String commaSeparated) {
+        List<String> list = new ArrayList<>();
+        if (commaSeparated != null) {
+            for (String s : commaSeparated.split(",")) {
+                String trimmed = s.trim();
+                if (!trimmed.isEmpty()) {
+                    list.add(trimmed);
+                }
+            }
+        }
+        return list;
+    }
+
     private static List<File> parseFileList(String commaSeparated, File baseDir) {
         List<File> list = new ArrayList<>();
         for (String s : commaSeparated.split(",")) {
@@ -510,6 +760,50 @@ public class ReinsConfigLoader {
             }
         }
         return list;
+    }
+
+    private static void bindContextSourceProperty(ReinsConfig config, String subKey, String value, File baseDir) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        List<ContextSourceSpec> specs = config.getContext().getSources();
+        if (subKey != null && !subKey.isBlank()) {
+            int firstDot = subKey.indexOf('.');
+            if (firstDot > 0) {
+                String indexStr = subKey.substring(0, firstDot);
+                String property = subKey.substring(firstDot + 1);
+                try {
+                    int idx = Integer.parseInt(indexStr);
+                    while (specs.size() <= idx) {
+                        specs.add(new ContextSourceSpec());
+                    }
+                    ContextSourceSpec spec = specs.get(idx);
+                    if ("file".equalsIgnoreCase(property) || "path".equalsIgnoreCase(property)) {
+                        spec.setFile(resolveFile(value, baseDir));
+                    } else if ("pattern".equalsIgnoreCase(property)) {
+                        spec.setPattern(value);
+                    } else if ("phase".equalsIgnoreCase(property) || "phases".equalsIgnoreCase(property)) {
+                        spec.setPhaseString(value);
+                    }
+                    return;
+                } catch (NumberFormatException ignored) {
+                }
+            }
+
+            try {
+                int idx = Integer.parseInt(subKey);
+                while (specs.size() <= idx) {
+                    specs.add(new ContextSourceSpec());
+                }
+                specs.get(idx).setFile(resolveFile(value, baseDir));
+                return;
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
+        for (String fileStr : parseStringList(value)) {
+            specs.add(new ContextSourceSpec(resolveFile(fileStr, baseDir)));
+        }
     }
 
     private static File resolveFile(String path, File baseDir) {

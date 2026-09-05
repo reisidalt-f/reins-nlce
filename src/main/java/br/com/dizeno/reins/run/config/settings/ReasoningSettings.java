@@ -25,6 +25,7 @@ public class ReasoningSettings {
     private boolean logParseErrorRecovery = false;
     private boolean enableReasoningLog = false;
     private boolean turnCountNote = true;
+    private int summarizeCycleTurns = 0;
 
     /**
      * Gets the enabled.
@@ -186,5 +187,23 @@ public class ReasoningSettings {
      */
     public void setTurnCountNote(boolean turnCountNote) {
         this.turnCountNote = turnCountNote;
+    }
+
+    /**
+     * Gets the summarize cycle turns interval.
+     *
+     * @return the numeric value
+     */
+    public int getSummarizeCycleTurns() {
+        return summarizeCycleTurns;
+    }
+
+    /**
+     * Sets the summarize cycle turns interval.
+     *
+     * @param summarizeCycleTurns the cycle interval for conversation summarization
+     */
+    public void setSummarizeCycleTurns(int summarizeCycleTurns) {
+        this.summarizeCycleTurns = summarizeCycleTurns;
     }
 }

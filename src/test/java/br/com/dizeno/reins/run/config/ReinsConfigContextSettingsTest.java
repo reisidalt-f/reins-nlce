@@ -20,16 +20,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ReinsConfigContextSettingsTest {
 
     @Test
-    void attachReferencedFiles_defaultsToTrue() {
+    void attachFiles_defaultsToFalse() {
         ContextSettings settings = new ContextSettings();
-        assertTrue(settings.isAttachReferencedFiles());
+        assertFalse(settings.getReferencesTree().isAttachFiles());
     }
 
     @Test
-    void attachReferencedFiles_canBeDisabled() {
+    void attachFiles_canBeEnabled() {
         ContextSettings settings = new ContextSettings();
-        settings.setAttachReferencedFiles(false);
-        assertFalse(settings.isAttachReferencedFiles());
+        settings.getReferencesTree().setAttachFiles(true);
+        assertTrue(settings.getReferencesTree().isAttachFiles());
     }
 
     @Test

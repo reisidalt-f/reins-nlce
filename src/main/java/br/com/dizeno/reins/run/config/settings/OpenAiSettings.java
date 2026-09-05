@@ -15,13 +15,13 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * OllamaSettings is part of the general application functions in the reins
+ * OpenAiSettings is part of the general application functions in the reins
  * architecture.
  * Acts as a configuration data holder for its prefix settings.
  */
-public class OllamaSettings implements ModelProviderSetting {
+public class OpenAiSettings implements ModelProviderSetting {
     private String model;
-    private String endpoint;
+    private String endpoint = "https://api.openai.com";
     private String apiKey;
     private int timeoutSeconds = 60;
     private int retryAttempts = 3;
@@ -120,7 +120,7 @@ public class OllamaSettings implements ModelProviderSetting {
     /**
      * Gets the options.
      *
-     * @return the string result
+     * @return the options map
      */
     public Map<String, Object> getOptions() {
         return options;
