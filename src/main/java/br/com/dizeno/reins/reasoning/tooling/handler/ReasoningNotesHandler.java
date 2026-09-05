@@ -29,7 +29,7 @@ import java.util.Set;
 
 /**
  * ReasoningNotesHandler is part of the general application functions in the reins architecture.
- * Acts as a component managing inference notes handler.
+ * Acts as a component managing reasoning notes handler.
  */
 public class ReasoningNotesHandler implements ToolOperationHandler {
     private final CompilationTrackingStore trackingStore;
@@ -55,8 +55,9 @@ public class ReasoningNotesHandler implements ToolOperationHandler {
      */
     @Override
     public boolean supports(ToolExecutionRequest.Operation operation) {
-        return operation == ToolExecutionRequest.Operation.ADD_INFERENCE_NOTE
-                || operation == ToolExecutionRequest.Operation.CLEAR_INFERENCE_NOTES;
+        return operation == ToolExecutionRequest.Operation.ADD_REASONING_NOTE
+                || operation == ToolExecutionRequest.Operation.CLEAR_REASONING_NOTES
+                || operation == ToolExecutionRequest.Operation.LIST_REASONING_NOTES;
     }
 
     /**
@@ -73,6 +74,11 @@ public class ReasoningNotesHandler implements ToolOperationHandler {
                                        BasePathResolver resolver,
                                        String sourceScope,
                                        ScriptRunnerConfig scriptRunnerConfig) {
+        if (scriptRunnerConfig != null && !scriptRunnerConfig.isAddReasoningNotes()) {
+            String reportPath = request.getSource() != null ? request.getSource() : request.getCompiled();
+            return ToolExecutionResult.error(request.getOperation(), reportPath,
+                    "Operation " + request.getOperation().name().toLowerCase() + " is disabled (tooling.addReasoningNotes is false).");
+        }
         try {
             return executeNoteOperation(request, resolver);
         } catch (IOException ex) {
@@ -98,7 +104,7 @@ public class ReasoningNotesHandler implements ToolOperationHandler {
                                                      BasePathResolver resolver) throws IOException {
         Path projectRoot = resolver.getProjectRoot().toAbsolutePath().normalize();
 
-        if (request.getOperation() == ToolExecutionRequest.Operation.ADD_INFERENCE_NOTE) {
+        if (request.getOperation() == ToolExecutionRequest.Operation.ADD_REASONING_NOTE) {
             String canonicalSource;
             String reportPath;
             if (request.getSource() != null && !request.getSource().isBlank()) {
@@ -126,13 +132,64 @@ public class ReasoningNotesHandler implements ToolOperationHandler {
             return result;
         }
 
-        
-        String canonicalSource = trackingStore.canonicalizePath(request.getSource());
-        int cleared = trackingManager.clearNotes(projectRoot, canonicalSource, trackingStore);
-        ToolExecutionResult result = ToolExecutionResult.success(
-                request.getOperation(), canonicalSource, "notes-cleared");
-        result.setContent("Cleared " + cleared + " note(s) from " + canonicalSource);
-        return result;
+        if (request.getOperation() == ToolExecutionRequest.Operation.LIST_REASONING_NOTES) {
+            StringBuilder sb = new StringBuilder();
+            if (request.getSource() != null && !request.getSource().isBlank()) {
+                String canonicalSource = trackingStore.canonicalizePath(request.getSource());
+                Optional<SourceTrackingRecord> recOpt = trackingStore.load(projectRoot, canonicalSource);
+                if (recOpt.isPresent() && recOpt.get().getNotes() != null && !recOpt.get().getNotes().isEmpty()) {
+                    sb.append("Notes for ").append(canonicalSource).append(":\n");
+                    for (ReasoningNote n : recOpt.get().getNotes()) {
+                        sb.append("- [").append(n.getOrigin()).append(" | ").append(n.getCreatedAt()).append("] ").append(n.getText()).append("\n");
+                    }
+                } else {
+                    sb.append("No notes for ").append(canonicalSource);
+                }
+                ToolExecutionResult result = ToolExecutionResult.success(
+                        request.getOperation(), canonicalSource, "notes-listed");
+                result.setContent(sb.toString().trim());
+                return result;
+            } else {
+                List<String> allSources = trackingStore.listAllTrackedSourcePaths(projectRoot);
+                int foundCount = 0;
+                for (String sourcePath : allSources) {
+                    Optional<SourceTrackingRecord> recOpt = trackingStore.load(projectRoot, sourcePath);
+                    if (recOpt.isPresent() && recOpt.get().getNotes() != null && !recOpt.get().getNotes().isEmpty()) {
+                        foundCount++;
+                        sb.append("Source: ").append(sourcePath).append(" (").append(recOpt.get().getNotes().size()).append(" notes):\n");
+                        for (ReasoningNote n : recOpt.get().getNotes()) {
+                            sb.append("  - [").append(n.getOrigin()).append(" | ").append(n.getCreatedAt()).append("] ").append(n.getText()).append("\n");
+                        }
+                    }
+                }
+                if (foundCount == 0) {
+                    sb.append("No notes found for any source.");
+                }
+                ToolExecutionResult result = ToolExecutionResult.success(
+                        request.getOperation(), "all", "notes-listed");
+                result.setContent(sb.toString().trim());
+                return result;
+            }
+        }
+
+        if (request.getSource() != null && !request.getSource().isBlank()) {
+            String canonicalSource = trackingStore.canonicalizePath(request.getSource());
+            int cleared = trackingManager.clearNotes(projectRoot, canonicalSource, trackingStore);
+            ToolExecutionResult result = ToolExecutionResult.success(
+                    request.getOperation(), canonicalSource, "notes-cleared");
+            result.setContent("Cleared " + cleared + " note(s) from " + canonicalSource);
+            return result;
+        } else {
+            List<String> allSources = trackingStore.listAllTrackedSourcePaths(projectRoot);
+            int totalCleared = 0;
+            for (String sourcePath : allSources) {
+                totalCleared += trackingManager.clearNotes(projectRoot, sourcePath, trackingStore);
+            }
+            ToolExecutionResult result = ToolExecutionResult.success(
+                    request.getOperation(), "all", "notes-cleared");
+            result.setContent("Cleared total of " + totalCleared + " note(s) across all sources.");
+            return result;
+        }
     }
 
     private String resolveSourceForCompiled(Path projectRoot, String canonicalCompiled) throws IOException {

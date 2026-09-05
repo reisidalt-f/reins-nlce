@@ -62,7 +62,7 @@ public class AddReasoningNoteMojo extends AbstractMojo {
             throw new MojoExecutionException(ex.getMessage(), ex);
         } catch (Exception ex) {
             throw new MojoExecutionException(
-                    "Failed to append inference note for source '" + source + "': " + ex.getMessage(), ex);
+                    "Failed to append reasoning note for source '" + source + "': " + ex.getMessage(), ex);
         }
     }
 }
