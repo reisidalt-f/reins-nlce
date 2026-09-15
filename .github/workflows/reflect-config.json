@@ -324,6 +324,15 @@
     "allPublicFields": true
   },
   {
+    "name": "br.com.dizeno.reins.reasoning.scripting.ReasoningScriptViews$CompiledSourceGroupView",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true
+  },
+  {
     "name": "io.smallrye.config._private.ConfigLogging",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
