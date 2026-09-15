@@ -52,7 +52,7 @@ jobs:
         run: mvn dependency:copy-dependencies
 
       - name: Build Native CLI Image with GraalVM
-        run: native-image -cp "target/classes${{ matrix.classpath_separator }}target/dependency/*" -H:ReflectionConfigurationFiles=.github/workflows/reflect-config.json -H:IncludeResources="reasoning/.*\.ftl" -H:IncludeResources="freemarker/version\.properties" -H:IncludeResources="freemarker/ext/beans/unsafeMethods\.properties" -H:IncludeResources="freemarker/ext/beans/DefaultMemberAccessPolicy-rules" --enable-url-protocols=http,https --no-fallback -o reins br.com.dizeno.reins.run.cli.ReinsCli
+        run: native-image -cp "target/classes${{ matrix.classpath_separator }}target/dependency/*" -H:ReflectionConfigurationFiles=.github/workflows/reflect-config.json -H:IncludeResources="reasoning/.*\.ftl" -H:IncludeResources="freemarker/version\.properties" -H:IncludeResources="freemarker/ext/beans/unsafeMethods\.properties" -H:IncludeResources="freemarker/ext/beans/DefaultMemberAccessPolicy-rules" -H:IncludeResources=".*\.properties" -H:IncludeResources="META-INF/services/.*" --enable-url-protocols=http,https --no-fallback -o reins br.com.dizeno.reins.run.cli.ReinsCli
 
       - name: Rename and prepare binary
         shell: bash
